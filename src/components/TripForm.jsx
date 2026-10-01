@@ -34,6 +34,15 @@ function TripForm({ isOpen, onClose, onSaveTrip }) { // object fields to store i
     }
 
     onSaveTrip(formData);
+
+    setFormData({
+      title: "",
+      startLocation: "",
+      destination: "",
+      startDate: "",
+      endDate: "",
+    });
+    
     onClose();
   }
 

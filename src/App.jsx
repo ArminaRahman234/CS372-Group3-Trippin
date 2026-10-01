@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./App.css";
+import TripForm from "./components/TripForm";
 
 const startingItems = [
   {
@@ -118,6 +119,8 @@ const typeIcons = {
 function App() {
   const [items, setItems] = useState(startingItems);
   const [showModal, setShowModal] = useState(false);
+  const [trip, setTrip] = useState(null);
+  const [isTripModalOpen, setIsTripModalOpen] = useState(false);
 
   const [form, setForm] = useState({
     title: "",
@@ -196,6 +199,18 @@ function App() {
     setShowModal(false);
   }
 
+  function handleSaveTrip(newTripData) {
+    setTrip(newTripData);
+  }
+
+  function handleOpenTripModal() {
+    setIsTripModalOpen(true);
+  }
+
+  function handleCloseTripModal() {
+    setIsTripModalOpen(false);
+  }
+
   return (
     <div className="app">
       <header className="navbar">
@@ -212,12 +227,22 @@ function App() {
         <section className="trip-header">
           <div>
             <p className="eyebrow">MY TRIP</p>
-            <h1>Chicago Weekend</h1>
-            <p className="route">Fort Wayne, IN → Chicago, IL</p>
-            <p className="dates">October 16 – October 19, 2026</p>
+            <h1>{trip ? trip.title : "Chicago Weekend"}</h1>
+            <p className="route">
+              {trip? `${trip.startLocation} → ${trip.destination}`: "Fort Wayne, IN → Chicago, IL"}
+            </p>
+            <p className="dates">
+              {trip ? `${trip.startDate} – ${trip.endDate}`: "October 16 – October 19, 2026"}
+            </p>
           </div>
 
-          <button className="save-button">♡ Save Trip</button>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button className="add-button" onClick={handleOpenTripModal}>
+              + Create Trip
+            </button>
+
+            <button className="save-button">♡ Save Trip</button>
+          </div>
         </section>
 
         <section className="itinerary-section">
@@ -380,6 +405,13 @@ function App() {
           </div>
         </div>
       )}
+
+      <TripForm
+        isOpen={isTripModalOpen}
+        onClose={handleCloseTripModal}
+        onSaveTrip={handleSaveTrip}
+      />
+      
     </div>
   );
 }
