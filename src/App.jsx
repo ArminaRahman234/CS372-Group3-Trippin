@@ -2,7 +2,7 @@ import { useState } from "react";
 import "./App.css";
 import TripForm from "./components/TripForm";
 
-const startingItems = [
+const startingItems = [ // temporary sample data for UI
   {
     id: 1,
     date: "Friday, October 16",
@@ -121,8 +121,16 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [trip, setTrip] = useState(null);
   const [isTripModalOpen, setIsTripModalOpen] = useState(false);
+  
+  const [tripDraft, setTripDraft] = useState({ // trip creation form
+    title: "",
+    startLocation: "",
+    destination: "",
+    startDate: "",
+    endDate: "",
+  });
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState({ // itenary item creation form
     title: "",
     type: "Activity",
     location: "",
@@ -131,7 +139,7 @@ function App() {
     notes: "",
   });
 
-  const groupedItems = items.reduce((groups, item) => {
+  const groupedItems = items.reduce((groups, item) => { // group itenary items by date
     if (!groups[item.date]) {
       groups[item.date] = [];
     }
@@ -140,7 +148,7 @@ function App() {
     return groups;
   }, {});
 
-  function handleChange(event) {
+  function handleChange(event) { // temporary data safekeep
     const { name, value } = event.target;
 
     setForm({
@@ -149,10 +157,10 @@ function App() {
     });
   }
 
-  function handleSubmit(event) {
+  function handleSubmit(event) { // save the itenary data
     event.preventDefault();
 
-    if (!form.title || !form.location || !form.date || !form.time) {
+    if (!form.title || !form.location || !form.date || !form.time) { // check for required input
       alert("Please complete the required fields.");
       return;
     }
@@ -201,11 +209,18 @@ function App() {
 
   function handleSaveTrip(newTripData) {
     setTrip(newTripData);
+    setTripDraft({
+      title: "",
+      startLocation: "",
+      destination: "",
+      startDate: "",
+      endDate: "",
+    });
   }
 
   function handleOpenTripModal() {
-    setIsTripModalOpen(true);
-  }
+    setShowModal(false);
+    setIsTripModalOpen(true);  }
 
   function handleCloseTripModal() {
     setIsTripModalOpen(false);
@@ -254,7 +269,10 @@ function App() {
 
             <button
               className="add-button"
-              onClick={() => setShowModal(true)}
+              onClick={() => {
+                setIsTripModalOpen(false);
+                setShowModal(true);
+              }}
             >
               + Add Item
             </button>
@@ -301,7 +319,7 @@ function App() {
             }
           }}
         >
-          <div className="modal">
+          <div className="modal"> {/*Style the form*/}
             <div className="modal-header">
               <div>
                 <p className="eyebrow">TRIP PLANNER</p>
@@ -406,12 +424,13 @@ function App() {
         </div>
       )}
 
-      <TripForm
+      <TripForm // add trip form
         isOpen={isTripModalOpen}
         onClose={handleCloseTripModal}
         onSaveTrip={handleSaveTrip}
+        tripDraft={tripDraft}
+        setTripDraft={setTripDraft}
       />
-      
     </div>
   );
 }

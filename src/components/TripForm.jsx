@@ -1,20 +1,11 @@
-import { useState } from "react";
-
-function TripForm({ isOpen, onClose, onSaveTrip }) { // object fields to store input data
-  const [formData, setFormData] = useState({
-    title: "",
-    startLocation: "",
-    destination: "",
-    startDate: "",
-    endDate: "",
-  });
+function TripForm({ isOpen, onClose, onSaveTrip, tripDraft, setTripDraft }) { // object fields to store input data
 
   if (!isOpen) return null;
 
   function handleChange(event) { // temporary data safekeep
     const { name, value } = event.target;
-    setFormData({
-      ...formData,
+    setTripDraft({
+      ...tripDraft,
       [name]: value,
     });
   }
@@ -23,26 +14,35 @@ function TripForm({ isOpen, onClose, onSaveTrip }) { // object fields to store i
     event.preventDefault();
 
     if ( // check for required input
-      !formData.title ||
-      !formData.startLocation ||
-      !formData.destination ||
-      !formData.startDate ||
-      !formData.endDate
+      !tripDraft.title ||
+      !tripDraft.startLocation ||
+      !tripDraft.destination ||
+      !tripDraft.startDate ||
+      !tripDraft.endDate
     ) {
       alert("Please fill out all required fields.");
       return;
     }
 
-    onSaveTrip(formData);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    setFormData({
-      title: "",
-      startLocation: "",
-      destination: "",
-      startDate: "",
-      endDate: "",
-    });
-    
+    const start = new Date(`${tripDraft.startDate}T00:00:00`);
+    const end = new Date(`${tripDraft.endDate}T00:00:00`);
+
+    if (end < start) { // check for start date is before end date
+      alert("End date cannot be earlier than start date.");
+      return;
+    }
+
+    if (start < today) { // warning for past start date
+      const confirmPastTrip = window.confirm(
+        "Notice: The start date you selected is in the past. Do you still want to save this trip?"
+      );
+      if (!confirmPastTrip) return;
+    }
+
+    onSaveTrip(tripDraft);
     onClose();
   }
 
@@ -53,7 +53,7 @@ function TripForm({ isOpen, onClose, onSaveTrip }) { // object fields to store i
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="modal">
+      <div className="modal"> {/*Style the form*/}
         <div className="modal-header">
           <div>
             <p className="eyebrow">NEW TRIP</p>
@@ -70,7 +70,7 @@ function TripForm({ isOpen, onClose, onSaveTrip }) { // object fields to store i
             <input
               type="text"
               name="title"
-              value={formData.title}
+              value={tripDraft.title}
               onChange={handleChange}
               placeholder="Example: Miami Summer Getaway"
             />
@@ -82,7 +82,7 @@ function TripForm({ isOpen, onClose, onSaveTrip }) { // object fields to store i
               <input
                 type="text"
                 name="startLocation"
-                value={formData.startLocation}
+                value={tripDraft.startLocation}
                 onChange={handleChange}
                 placeholder="Example: Fort Wayne, IN"
               />
@@ -93,7 +93,7 @@ function TripForm({ isOpen, onClose, onSaveTrip }) { // object fields to store i
               <input
                 type="text"
                 name="destination"
-                value={formData.destination}
+                value={tripDraft.destination}
                 onChange={handleChange}
                 placeholder="Example: Miami, FL"
               />
@@ -106,7 +106,7 @@ function TripForm({ isOpen, onClose, onSaveTrip }) { // object fields to store i
               <input
                 type="date"
                 name="startDate"
-                value={formData.startDate}
+                value={tripDraft.startDate}
                 onChange={handleChange}
               />
             </label>
@@ -116,7 +116,7 @@ function TripForm({ isOpen, onClose, onSaveTrip }) { // object fields to store i
               <input
                 type="date"
                 name="endDate"
-                value={formData.endDate}
+                value={tripDraft.endDate}
                 onChange={handleChange}
               />
             </label>
