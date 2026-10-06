@@ -1,6 +1,7 @@
 import { useState } from "react";
 import "./App.css";
 import TripForm from "./components/TripForm";
+import { getTrips, addTrip } from "./services/tripStorage";
 
 const startingItems = [ // temporary sample data for UI
   {
@@ -119,7 +120,8 @@ const typeIcons = {
 function App() {
   const [items, setItems] = useState(startingItems);
   const [showModal, setShowModal] = useState(false);
-  const [trip, setTrip] = useState(null);
+  const [trips, setTrips] = useState(() => getTrips()); //list of trips from local storage
+  const trip = trips.length > 0 ? trips[trips.length - 1] : null; //return the most recent index, if none returns a null
   const [isTripModalOpen, setIsTripModalOpen] = useState(false);
   
   const [tripDraft, setTripDraft] = useState({ // trip creation form
@@ -208,7 +210,8 @@ function App() {
   }
 
   function handleSaveTrip(newTripData) {
-    setTrip(newTripData);
+    const updatedTrips = addTrip(newTripData);
+    setTrips(updatedTrips);
     setTripDraft({
       title: "",
       startLocation: "",
