@@ -61,7 +61,8 @@ Users can create trips, organize itinerary items, explore locations on an intera
 
 ### Front-End
 
-* React 18+
+* React 19
+* Vite
 * Tailwind CSS
 * `@react-google-maps/api`
 * JavaScript
@@ -100,30 +101,34 @@ Users can create trips, organize itinerary items, explore locations on an intera
 ## 📂 Planned Project Structure
 
 ```text
-trippin/
+CS372-Group3-Trippin/
 │
-├── client/                 # React front-end
+├── client/                 # React front-end (Vite)
+│   ├── public/
 │   ├── src/
+│   │   ├── assets/
 │   │   ├── components/
 │   │   ├── pages/
 │   │   ├── services/
-│   │   └── App.jsx
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── index.html
+│   ├── vite.config.js
 │   └── package.json
 │
 ├── server/                 # Node/Express back-end
-│   ├── routes/
-│   ├── controllers/
-│   ├── middleware/
-│   └── server.js
-│
-├── prisma/
-│   └── schema.prisma
-│
-├── tests/
+│   ├── src/
+│   │   ├── routes/
+│   │   ├── controllers/
+│   │   ├── middleware/
+│   │   └── index.js
+│   ├── prisma/
+│   │   └── schema.prisma
+│   ├── tests/
+│   └── package.json
 │
 ├── .gitignore
-├── README.md
-└── package.json
+└── README.md
 ```
 
 *The project structure may change as development progresses.*
@@ -134,19 +139,31 @@ trippin/
 
 The exact setup instructions will be updated as development progresses.
 
+**Requirements:** Node.js (LTS) and npm
+
 ```bash
-# Clone the repository
+# Clone the repository and enter
 git clone <repository-url>
-
-# Enter the project directory
 cd CS372-Group3-Trippin
+```
+Run the client and the server in **two seperate termianals**.
 
-# Install dependencies
+**Client** (http://localhost:5173)
+
+```bash
+cd client
 npm install
-
-# Start the development environment
 npm run dev
 ```
+
+**Server** (http://localhost:5000)
+
+```bash
+cd server
+npm install
+npm run dev
+```
+To check the server is running, visit http://localhost:5000/api/health. 
 
 Environment variables such as database credentials and Google Maps API keys should be stored in a `.env` file and should **not** be committed to GitHub.
 
@@ -159,7 +176,7 @@ Example:
 ```env
 DATABASE_URL=your_postgresql_database_url
 GOOGLE_MAPS_API_KEY=your_google_maps_api_key
-PORT=3000
+PORT=5000
 ```
 
 A `.env.example` file can be included in the repository to show which environment variables are required without exposing private API keys.
