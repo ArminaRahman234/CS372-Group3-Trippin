@@ -1,4 +1,11 @@
-function TripForm({ isOpen, onClose, onSaveTrip, tripDraft, setTripDraft }) { // object fields to store input data
+function TripForm({
+  isOpen,
+  onClose,
+  onSaveTrip,
+  tripDraft,
+  setTripDraft,
+  isEditing = false,
+}) { // object fields to store input data
 
   if (!isOpen) return null;
 
@@ -56,8 +63,12 @@ function TripForm({ isOpen, onClose, onSaveTrip, tripDraft, setTripDraft }) { //
       <div className="modal"> {/*Style the form*/}
         <div className="modal-header">
           <div>
-            <p className="eyebrow">NEW TRIP</p>
-            <h2>Create Your Trip</h2>
+            <p className="eyebrow">
+  {isEditing ? "EDIT TRIP" : "NEW TRIP"}
+</p>
+<h2>
+  {isEditing ? "Edit Your Trip" : "Create Your Trip"}
+</h2>
           </div>
           <button className="close-button" onClick={onClose}>
             ✕
@@ -131,8 +142,8 @@ function TripForm({ isOpen, onClose, onSaveTrip, tripDraft, setTripDraft }) { //
               Cancel
             </button>
             <button type="submit" className="submit-button">
-              Save Trip
-            </button>
+  {isEditing ? "Save Changes" : "Save Trip"}
+</button>
           </div>
         </form>
       </div>

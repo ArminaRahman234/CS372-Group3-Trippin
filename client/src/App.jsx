@@ -1,8 +1,9 @@
+
 import { useState } from "react";
 import "./App.css";
 import TripForm from "./components/TripForm";
 
-const startingItems = [ // temporary sample data for UI
+const startingItems = [
   {
     id: 1,
     date: "Friday, October 16",
@@ -116,21 +117,42 @@ const typeIcons = {
   "Saved Spot": "📍",
 };
 
+const emptyTrip = {
+  title: "",
+  startLocation: "",
+  destination: "",
+  startDate: "",
+  endDate: "",
+};
+
+const STORAGE_KEY = "trippin.currentTrip";
+
 function App() {
   const [items, setItems] = useState(startingItems);
   const [showModal, setShowModal] = useState(false);
-  const [trip, setTrip] = useState(null);
-  const [isTripModalOpen, setIsTripModalOpen] = useState(false);
-  
-  const [tripDraft, setTripDraft] = useState({ // trip creation form
-    title: "",
-    startLocation: "",
-    destination: "",
-    startDate: "",
-    endDate: "",
+
+  // Restore the saved trip when the page loads.
+  const [trip, setTrip] = useState(() => {
+    try {
+      const savedTrip = localStorage.getItem(STORAGE_KEY);
+      const parsedTrip = savedTrip ? JSON.parse(savedTrip) : null;
+
+      return parsedTrip &&
+        typeof parsedTrip === "object" &&
+        !Array.isArray(parsedTrip)
+        ? parsedTrip
+        : null;
+    } catch {
+      return null;
+    }
   });
 
-  const [form, setForm] = useState({ // itenary item creation form
+  const [isTripModalOpen, setIsTripModalOpen] = useState(false);
+  const [isEditingTrip, setIsEditingTrip] = useState(false);
+  const [tripDraft, setTripDraft] = useState({ ...emptyTrip });
+
+  // Itinerary item creation form.
+  const [form, setForm] = useState({
     title: "",
     type: "Activity",
     location: "",
@@ -139,7 +161,7 @@ function App() {
     notes: "",
   });
 
-  const groupedItems = items.reduce((groups, item) => { // group itenary items by date
+  const groupedItems = items.reduce((groups, item) => {
     if (!groups[item.date]) {
       groups[item.date] = [];
     }
@@ -148,19 +170,19 @@ function App() {
     return groups;
   }, {});
 
-  function handleChange(event) { // temporary data safekeep
+  function handleChange(event) {
     const { name, value } = event.target;
 
-    setForm({
-      ...form,
+    setForm((previousForm) => ({
+      ...previousForm,
       [name]: value,
-    });
+    }));
   }
 
-  function handleSubmit(event) { // save the itenary data
+  function handleSubmit(event) {
     event.preventDefault();
 
-    if (!form.title || !form.location || !form.date || !form.time) { // check for required input
+    if (!form.title || !form.location || !form.date || !form.time) {
       alert("Please complete the required fields.");
       return;
     }
@@ -175,7 +197,7 @@ function App() {
 
     const [hours, minutes] = form.time.split(":");
     const timeDate = new Date();
-    timeDate.setHours(hours, minutes);
+    timeDate.setHours(Number(hours), Number(minutes));
 
     const formattedTime = timeDate.toLocaleTimeString("en-US", {
       hour: "numeric",
@@ -193,7 +215,7 @@ function App() {
       notes: form.notes,
     };
 
-    setItems([...items, newItem]);
+    setItems((previousItems) => [...previousItems, newItem]);
 
     setForm({
       title: "",
@@ -207,22 +229,76 @@ function App() {
     setShowModal(false);
   }
 
+  // Save a newly created trip or update an existing trip.
   function handleSaveTrip(newTripData) {
-    setTrip(newTripData);
-    setTripDraft({
-      title: "",
-      startLocation: "",
-      destination: "",
-      startDate: "",
-      endDate: "",
-    });
+    const updatedTrip = { ...newTripData };
+
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(updatedTrip)
+      );
+    } catch {
+      alert("Unable to save this trip to local storage.");
+      return;
+    }
+
+    setTrip(updatedTrip);
+    setTripDraft({ ...emptyTrip });
+    setIsEditingTrip(false);
+    setIsTripModalOpen(false);
   }
 
+  // Open a blank form to create a new trip.
   function handleOpenTripModal() {
     setShowModal(false);
-    setIsTripModalOpen(true);  }
+    setIsEditingTrip(false);
+    setTripDraft({ ...emptyTrip });
+    setIsTripModalOpen(true);
+  }
 
   function handleCloseTripModal() {
+    setIsTripModalOpen(false);
+    setIsEditingTrip(false);
+    setTripDraft({ ...emptyTrip });
+  }
+
+  // Open the form with the current trip's details.
+  function handleEditTrip() {
+    if (!trip) return;
+
+    setShowModal(false);
+    setIsEditingTrip(true);
+    setTripDraft({
+      title: trip.title || "",
+      startLocation: trip.startLocation || "",
+      destination: trip.destination || "",
+      startDate: trip.startDate || "",
+      endDate: trip.endDate || "",
+    });
+    setIsTripModalOpen(true);
+  }
+
+  // Delete the current trip after confirmation.
+  function handleDeleteTrip() {
+    if (!trip) return;
+
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this trip?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      alert("Unable to delete the trip from local storage.");
+      return;
+    }
+
+    setTrip(null);
+    setTripDraft({ ...emptyTrip });
+    setIsEditingTrip(false);
     setIsTripModalOpen(false);
   }
 
@@ -242,21 +318,76 @@ function App() {
         <section className="trip-header">
           <div>
             <p className="eyebrow">MY TRIP</p>
-            <h1>{trip ? trip.title : "Chicago Weekend"}</h1>
+
+            <h1>{trip ? trip.title : "No Trip Selected"}</h1>
+
             <p className="route">
-              {trip? `${trip.startLocation} → ${trip.destination}`: "Fort Wayne, IN → Chicago, IL"}
+              {trip
+                ? `${trip.startLocation} → ${trip.destination}`
+                : "Create a trip to get started"}
             </p>
+
             <p className="dates">
-              {trip ? `${trip.startDate} – ${trip.endDate}`: "October 16 – October 19, 2026"}
+              {trip
+                ? `${trip.startDate} – ${trip.endDate}`
+                : ""}
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button className="add-button" onClick={handleOpenTripModal}>
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              className="add-button"
+              onClick={handleOpenTripModal}
+            >
               + Create Trip
             </button>
 
-            <button className="save-button">♡ Save Trip</button>
+            {trip && (
+              <>
+                <button
+                  className="save-button"
+                  onClick={handleEditTrip}
+                >
+                  ✏️ Edit Trip
+                </button>
+
+                <button
+                  className="save-button"
+                  onClick={handleDeleteTrip}
+                >
+                  🗑️ Delete Trip
+                </button>
+              </>
+            )}
+
+            <button
+  className="save-button"
+  onClick={() => {
+    if (!trip) {
+      alert("Please create a trip first.");
+      return;
+    }
+
+    try {
+      localStorage.setItem(
+        "trippin.currentTrip",
+        JSON.stringify(trip)
+      );
+
+      alert("Trip saved successfully!");
+    } catch {
+      alert("Unable to save the trip.");
+    }
+  }}
+>
+  ♡ Save Trip
+</button>
           </div>
         </section>
 
@@ -279,33 +410,45 @@ function App() {
           </div>
 
           <div className="timeline">
-            {Object.entries(groupedItems).map(([date, dayItems]) => (
-              <div className="day" key={date}>
-                <h3>{date}</h3>
+            {Object.entries(groupedItems).map(
+              ([date, dayItems]) => (
+                <div className="day" key={date}>
+                  <h3>{date}</h3>
 
-                <div className="day-items">
-                  {dayItems.map((item) => (
-                    <article className="itinerary-card" key={item.id}>
-                      <div className="item-icon">{item.icon}</div>
-
-                      <div className="item-info">
-                        <span className="item-type">{item.type}</span>
-                        <h4>{item.title}</h4>
-
-                        <div className="item-details">
-                          <span>🕐 {item.time}</span>
-                          <span>📍 {item.location}</span>
+                  <div className="day-items">
+                    {dayItems.map((item) => (
+                      <article
+                        className="itinerary-card"
+                        key={item.id}
+                      >
+                        <div className="item-icon">
+                          {item.icon}
                         </div>
 
-                        {item.notes && (
-                          <p className="notes">{item.notes}</p>
-                        )}
-                      </div>
-                    </article>
-                  ))}
+                        <div className="item-info">
+                          <span className="item-type">
+                            {item.type}
+                          </span>
+
+                          <h4>{item.title}</h4>
+
+                          <div className="item-details">
+                            <span>🕐 {item.time}</span>
+                            <span>📍 {item.location}</span>
+                          </div>
+
+                          {item.notes && (
+                            <p className="notes">
+                              {item.notes}
+                            </p>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            )}
           </div>
         </section>
       </main>
@@ -319,7 +462,7 @@ function App() {
             }
           }}
         >
-          <div className="modal"> {/*Style the form*/}
+          <div className="modal">
             <div className="modal-header">
               <div>
                 <p className="eyebrow">TRIP PLANNER</p>
@@ -415,7 +558,10 @@ function App() {
                   Cancel
                 </button>
 
-                <button type="submit" className="submit-button">
+                <button
+                  type="submit"
+                  className="submit-button"
+                >
                   Add to Itinerary
                 </button>
               </div>
@@ -424,12 +570,13 @@ function App() {
         </div>
       )}
 
-      <TripForm // add trip form
+      <TripForm
         isOpen={isTripModalOpen}
         onClose={handleCloseTripModal}
         onSaveTrip={handleSaveTrip}
         tripDraft={tripDraft}
         setTripDraft={setTripDraft}
+        isEditing={isEditingTrip}
       />
     </div>
   );
