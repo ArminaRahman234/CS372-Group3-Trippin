@@ -1,12 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./App.css";
 import TripForm from "./components/TripForm";
-import { getTrips, addTrip } from "./services/tripStorage";
+import { ItineraryItem, ItineraryForm } from "./components/ItineraryForm";
+
+import {
+  getTrips,
+  addTrip,
+  getItineraryItems,
+  saveItineraryItem,
+  deleteItineraryItem,
+} from "./services/tripStorage";
+
+const defaultTrip = { // temporary sample data for UI
+  id: "default-chicago",
+  title: "Chicago Weekend",
+  startLocation: "Fort Wayne, IN",
+  destination: "Chicago, IL",
+  startDate: "2026-10-16",
+  endDate: "2026-10-19",
+};
 
 const startingItems = [ // temporary sample data for UI
   {
     id: 1,
+    tripId: "default-chicago",
     date: "Friday, October 16",
+    rawDate: "2026-10-16",
+    rawTime: "10:00",
     icon: "🚗",
     type: "Transportation",
     title: "Drive to Chicago",
@@ -14,9 +34,13 @@ const startingItems = [ // temporary sample data for UI
     location: "Fort Wayne, IN → Chicago, IL",
     notes: "Estimated travel time: 3 hr 15 min",
   },
+
   {
     id: 2,
+    tripId: "default-chicago",
     date: "Friday, October 16",
+    rawDate: "2026-10-16",
+    rawTime: "15:00",
     icon: "🏨",
     type: "Hotel",
     title: "Hotel Check-In",
@@ -24,107 +48,37 @@ const startingItems = [ // temporary sample data for UI
     location: "Hyatt Regency Chicago",
     notes: "151 E Wacker Dr, Chicago",
   },
-  {
-    id: 3,
-    date: "Friday, October 16",
-    icon: "🍽️",
-    type: "Food",
-    title: "Dinner",
-    time: "7:00 PM",
-    location: "Downtown Chicago",
-    notes: "",
-  },
-  {
-    id: 4,
-    date: "Saturday, October 17",
-    icon: "☕",
-    type: "Food",
-    title: "Breakfast",
-    time: "9:00 AM",
-    location: "Chicago, IL",
-    notes: "",
-  },
-  {
-    id: 5,
-    date: "Saturday, October 17",
-    icon: "🎡",
-    type: "Activity",
-    title: "Navy Pier",
-    time: "11:00 AM",
-    location: "600 E Grand Ave, Chicago",
-    notes: "Explore the pier and lakefront",
-  },
-  {
-    id: 6,
-    date: "Saturday, October 17",
-    icon: "🛍️",
-    type: "Shopping",
-    title: "Magnificent Mile",
-    time: "3:00 PM",
-    location: "Michigan Avenue, Chicago",
-    notes: "Shopping and sightseeing",
-  },
-  {
-    id: 7,
-    date: "Sunday, October 18",
-    icon: "🌳",
-    type: "Saved Spot",
-    title: "Millennium Park",
-    time: "10:30 AM",
-    location: "201 E Randolph St, Chicago",
-    notes: "Visit Cloud Gate and explore the park",
-  },
-  {
-    id: 8,
-    date: "Sunday, October 18",
-    icon: "🏙️",
-    type: "Activity",
-    title: "Willis Tower",
-    time: "3:00 PM",
-    location: "233 S Wacker Dr, Chicago",
-    notes: "Visit Skydeck Chicago",
-  },
-  {
-    id: 9,
-    date: "Monday, October 19",
-    icon: "🏨",
-    type: "Hotel",
-    title: "Hotel Check-Out",
-    time: "10:00 AM",
-    location: "Hyatt Regency Chicago",
-    notes: "",
-  },
-  {
-    id: 10,
-    date: "Monday, October 19",
-    icon: "🚗",
-    type: "Transportation",
-    title: "Return to Fort Wayne",
-    time: "11:00 AM",
-    location: "Chicago, IL → Fort Wayne, IN",
-    notes: "",
-  },
 ];
 
-const typeIcons = {
-  Flight: "✈️",
-  Hotel: "🏨",
-  Activity: "🎟️",
-  Park: "🌳",
-  Shopping: "🛍️",
-  Food: "🍽️",
-  Transportation: "🚗",
-  "Saved Spot": "📍",
-};
-
 function App() {
-  const [items, setItems] = useState(startingItems);
-  const [showModal, setShowModal] = useState(false);
-  const [trips, setTrips] = useState(() => getTrips()); //list of trips from local storage
-  const trip = trips.length > 0 ? trips[trips.length - 1] : null; //return the most recent index, if none returns a null
+  const [trips, setTrips] = useState(() => getTrips());
+  const activeTrip = trips.length > 0 ? trips[trips.length - 1] : defaultTrip; // default to last trip
+
+  const [items, setItems] = useState(() => {
+    const storedItems = getItineraryItems(activeTrip.id);
+
+    if (storedItems.length === 0 && activeTrip.id === "default-chicago") {
+      return startingItems;
+    }
+
+    return storedItems;
+  });
+
+  useEffect(() => {
+    const storedItems = getItineraryItems(activeTrip.id);
+
+    if (storedItems.length === 0 && activeTrip.id === "default-chicago") {
+      setItems(startingItems);
+    } else {
+      setItems(storedItems);
+    }
+  }, [activeTrip.id]);
+
+  const [showItemModal, setShowItemModal] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
   const [isTripModalOpen, setIsTripModalOpen] = useState(false);
-  
-  const [tripDraft, setTripDraft] = useState({ // trip creation form
+
+  const [tripDraft, setTripDraft] = useState({
     title: "",
     startLocation: "",
     destination: "",
@@ -132,16 +86,14 @@ function App() {
     endDate: "",
   });
 
-  const [form, setForm] = useState({ // itenary item creation form
-    title: "",
-    type: "Activity",
-    location: "",
-    date: "",
-    time: "",
-    notes: "",
+  const sortedItems = [...items].sort((a, b) => { // sort itenary items list
+    const dateA = a.rawDate ? new Date(`${a.rawDate}T00:00:00`) : new Date(a.date);
+    const dateB = b.rawDate ? new Date(`${b.rawDate}T00:00:00`) : new Date(b.date);
+
+    return dateA - dateB;
   });
 
-  const groupedItems = items.reduce((groups, item) => { // group itenary items by date
+  const groupedItems = sortedItems.reduce((groups, item) => { // group itenary items by date
     if (!groups[item.date]) {
       groups[item.date] = [];
     }
@@ -150,68 +102,28 @@ function App() {
     return groups;
   }, {});
 
-  function handleChange(event) { // temporary data safekeep
-    const { name, value } = event.target;
-
-    setForm({
-      ...form,
-      [name]: value,
-    });
+  function handleSaveItem(itemData) {
+    const updated = saveItineraryItem(itemData, activeTrip?.id);
+    setItems(updated);
+    setEditingItem(null);
   }
 
-  function handleSubmit(event) { // save the itenary data
-    event.preventDefault();
-
-    if (!form.title || !form.location || !form.date || !form.time) { // check for required input
-      alert("Please complete the required fields.");
-      return;
+  function handleDeleteItem(itemId) {
+    if (window.confirm("Are you sure you want to delete this item?")) {
+      const updated = deleteItineraryItem(itemId, activeTrip?.id);
+      setItems(updated);
     }
+  }
 
-    const selectedDate = new Date(`${form.date}T12:00:00`);
-
-    const formattedDate = selectedDate.toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-    });
-
-    const [hours, minutes] = form.time.split(":");
-    const timeDate = new Date();
-    timeDate.setHours(hours, minutes);
-
-    const formattedTime = timeDate.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-
-    const newItem = {
-      id: Date.now(),
-      date: formattedDate,
-      icon: typeIcons[form.type] || "📍",
-      type: form.type,
-      title: form.title,
-      time: formattedTime,
-      location: form.location,
-      notes: form.notes,
-    };
-
-    setItems([...items, newItem]);
-
-    setForm({
-      title: "",
-      type: "Activity",
-      location: "",
-      date: "",
-      time: "",
-      notes: "",
-    });
-
-    setShowModal(false);
+  function handleEditItem(item) {
+    setEditingItem(item);
+    setShowItemModal(true);
   }
 
   function handleSaveTrip(newTripData) {
     const updatedTrips = addTrip(newTripData);
     setTrips(updatedTrips);
+
     setTripDraft({
       title: "",
       startLocation: "",
@@ -221,19 +133,10 @@ function App() {
     });
   }
 
-  function handleOpenTripModal() {
-    setShowModal(false);
-    setIsTripModalOpen(true);  }
-
-  function handleCloseTripModal() {
-    setIsTripModalOpen(false);
-  }
-
   return (
     <div className="app">
       <header className="navbar">
         <div className="logo">Trippin</div>
-
         <nav>
           <span className="active">My Trips</span>
           <span>Explore</span>
@@ -245,17 +148,29 @@ function App() {
         <section className="trip-header">
           <div>
             <p className="eyebrow">MY TRIP</p>
-            <h1>{trip ? trip.title : "Chicago Weekend"}</h1>
+            <h1>{activeTrip ? activeTrip.title : "Chicago Weekend"}</h1>
+
             <p className="route">
-              {trip? `${trip.startLocation} → ${trip.destination}`: "Fort Wayne, IN → Chicago, IL"}
+              {activeTrip
+                ? `${activeTrip.startLocation} → ${activeTrip.destination}`
+                : "Fort Wayne, IN → Chicago, IL"}
             </p>
+
             <p className="dates">
-              {trip ? `${trip.startDate} – ${trip.endDate}`: "October 16 – October 19, 2026"}
+              {activeTrip
+                ? `${activeTrip.startDate} – ${activeTrip.endDate}`
+                : "October 16 – October 19, 2026"}
             </p>
           </div>
 
           <div style={{ display: "flex", gap: "10px" }}>
-            <button className="add-button" onClick={handleOpenTripModal}>
+            <button
+              className="add-button"
+              onClick={() => {
+                setShowItemModal(false);
+                setIsTripModalOpen(true);
+              }}
+            >
               + Create Trip
             </button>
 
@@ -273,8 +188,9 @@ function App() {
             <button
               className="add-button"
               onClick={() => {
+                setEditingItem(null);
                 setIsTripModalOpen(false);
-                setShowModal(true);
+                setShowItemModal(true);
               }}
             >
               + Add Item
@@ -282,154 +198,46 @@ function App() {
           </div>
 
           <div className="timeline">
-            {Object.entries(groupedItems).map(([date, dayItems]) => (
-              <div className="day" key={date}>
-                <h3>{date}</h3>
+            {Object.keys(groupedItems).length === 0 ? (
+              <p style={{ color: "#64748b" }}>No itinerary items added yet for this trip.</p>
+            ) : (
+              Object.entries(groupedItems).map(([date, dayItems]) => (
+                <div className="day" key={date}>
+                  <h3>{date}</h3>
 
-                <div className="day-items">
-                  {dayItems.map((item) => (
-                    <article className="itinerary-card" key={item.id}>
-                      <div className="item-icon">{item.icon}</div>
-
-                      <div className="item-info">
-                        <span className="item-type">{item.type}</span>
-                        <h4>{item.title}</h4>
-
-                        <div className="item-details">
-                          <span>🕐 {item.time}</span>
-                          <span>📍 {item.location}</span>
-                        </div>
-
-                        {item.notes && (
-                          <p className="notes">{item.notes}</p>
-                        )}
-                      </div>
-                    </article>
-                  ))}
+                  <div className="day-items">
+                    {dayItems.map((item) => (
+                      <ItineraryItem
+                        key={item.id}
+                        item={item}
+                        onEdit={handleEditItem}
+                        onDelete={handleDeleteItem}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </section>
       </main>
 
-      {showModal && (
-        <div
-          className="modal-overlay"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setShowModal(false);
-            }
-          }}
-        >
-          <div className="modal"> {/*Style the form*/}
-            <div className="modal-header">
-              <div>
-                <p className="eyebrow">TRIP PLANNER</p>
-                <h2>Add Itinerary Item</h2>
-              </div>
+      <ItineraryForm // add itinerary form
+        isOpen={showItemModal}
 
-              <button
-                className="close-button"
-                onClick={() => setShowModal(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit}>
-              <label>
-                Activity or Booking Name *
-                <input
-                  name="title"
-                  value={form.title}
-                  onChange={handleChange}
-                  placeholder="Example: Architecture Boat Tour"
-                />
-              </label>
-
-              <label>
-                Type
-                <select
-                  name="type"
-                  value={form.type}
-                  onChange={handleChange}
-                >
-                  <option>Flight</option>
-                  <option>Hotel</option>
-                  <option>Activity</option>
-                  <option>Park</option>
-                  <option>Shopping</option>
-                  <option>Food</option>
-                  <option>Transportation</option>
-                  <option>Saved Spot</option>
-                </select>
-              </label>
-
-              <label>
-                Location *
-                <input
-                  name="location"
-                  value={form.location}
-                  onChange={handleChange}
-                  placeholder="Example: Chicago Riverwalk"
-                />
-              </label>
-
-              <div className="form-row">
-                <label>
-                  Date *
-                  <input
-                    type="date"
-                    name="date"
-                    value={form.date}
-                    onChange={handleChange}
-                  />
-                </label>
-
-                <label>
-                  Time *
-                  <input
-                    type="time"
-                    name="time"
-                    value={form.time}
-                    onChange={handleChange}
-                  />
-                </label>
-              </div>
-
-              <label>
-                Notes
-                <textarea
-                  name="notes"
-                  value={form.notes}
-                  onChange={handleChange}
-                  placeholder="Add reservation details or other notes..."
-                  rows="3"
-                />
-              </label>
-
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="cancel-button"
-                  onClick={() => setShowModal(false)}
-                >
-                  Cancel
-                </button>
-
-                <button type="submit" className="submit-button">
-                  Add to Itinerary
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+        onClose={() => {
+          setShowItemModal(false);
+          setEditingItem(null);
+        }}
+        
+        onSave={handleSaveItem}
+        editingItem={editingItem}
+        activeTrip={activeTrip}
+      />
 
       <TripForm // add trip form
         isOpen={isTripModalOpen}
-        onClose={handleCloseTripModal}
+        onClose={() => setIsTripModalOpen(false)}
         onSaveTrip={handleSaveTrip}
         tripDraft={tripDraft}
         setTripDraft={setTripDraft}
