@@ -20,7 +20,7 @@ const defaultTrip = { // temporary sample data for UI
   endDate: "2026-10-19",
 };
 
-const startingItems = [ // temporary sample data for UI
+const startingItems = [
   {
     id: 1,
     tripId: "default-chicago",
@@ -50,9 +50,18 @@ const startingItems = [ // temporary sample data for UI
   },
 ];
 
+const emptyTrip = {
+  title: "",
+  startLocation: "",
+  destination: "",
+  startDate: "",
+  endDate: "",
+};
+
 function App() {
   const [trips, setTrips] = useState(() => getTrips());
-  const activeTrip = trips.length > 0 ? trips[trips.length - 1] : defaultTrip; // default to last trip
+  const hasSavedTrip = trips.length > 0;
+  const activeTrip = hasSavedTrip ? trips[trips.length - 1] : defaultTrip; // default to last trip
 
   const [items, setItems] = useState(() => {
     const storedItems = getItineraryItems(activeTrip.id);
@@ -76,15 +85,10 @@ function App() {
 
   const [showItemModal, setShowItemModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  
   const [isTripModalOpen, setIsTripModalOpen] = useState(false);
-
-  const [tripDraft, setTripDraft] = useState({
-    title: "",
-    startLocation: "",
-    destination: "",
-    startDate: "",
-    endDate: "",
-  });
+  const [isEditingTrip, setIsEditingTrip] = useState(false);
+  const [tripDraft, setTripDraft] = useState({...emptyTrip});
 
   const sortedItems = [...items].sort((a, b) => { // sort itenary items list
     const dateA = a.rawDate ? new Date(`${a.rawDate}T00:00:00`) : new Date(a.date);
@@ -102,6 +106,7 @@ function App() {
     return groups;
   }, {});
 
+
   function handleSaveItem(itemData) {
     const updated = saveItineraryItem(itemData, activeTrip?.id);
     setItems(updated);
@@ -115,22 +120,86 @@ function App() {
     }
   }
 
+
   function handleEditItem(item) {
     setEditingItem(item);
     setShowItemModal(true);
   }
 
+  // Save a newly created trip or update an existing trip.
   function handleSaveTrip(newTripData) {
-    const updatedTrips = addTrip(newTripData);
-    setTrips(updatedTrips);
 
+    let updatedTrips;
+
+    try {
+      updatedTrips =
+        isEditingTrip && hasSavedTrip
+          ? updatedTrip(activeTrip.id, newTripData)
+          : addTrip(newTripData);
+    } catch {
+      alert("Unable to save this trip to local storage.");
+      return;
+    }
+
+    setTrip(updatedTrip);
+    setTripDraft({ ...emptyTrip });
+    setIsEditingTrip(false);
+    setIsTripModalOpen(false);
+  }
+
+  // Open a blank form to create a new trip.
+  function handleOpenTripModal() {
+    setShowModal(false);
+    setIsEditingTrip(false);
+    setTripDraft({ ...emptyTrip });
+    setIsTripModalOpen(true);
+  }
+
+  function handleCloseTripModal() {
+    setIsTripModalOpen(false);
+    setIsEditingTrip(false);
+    setTripDraft({ ...emptyTrip });
+  }
+
+  // Open the form with the current trip's details.
+  function handleEditTrip() {
+    if (!hasSavedTrip) return;
+
+    setShowItemModal(false);
+    setIsEditingTrip(true);
     setTripDraft({
-      title: "",
-      startLocation: "",
-      destination: "",
-      startDate: "",
-      endDate: "",
+      title: activeTrip.title || "",
+      startLocation: activeTrip.startLocation || "",
+      destination: activeTrip.destination || "",
+      startDate: activeTrip.startDate || "",
+      endDate: activeTrip.endDate || "",
     });
+    setIsTripModalOpen(true);
+  }
+
+  // Delete the current trip after confirmation.
+  function handleDeleteTrip() {
+    if (!hasSavedTrip) return;
+
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this trip?"
+    );
+
+    if (!confirmed) return;
+
+    let updatedTrips;
+
+    try {
+      updatedTrips = deleteTrip(activeTrip.id);
+    } catch {
+      alert("Unable to delete the trip from local storage.");
+      return;
+    }
+
+    setTrip(updatedTrips);
+    setTripDraft({ ...emptyTrip });
+    setIsEditingTrip(false);
+    setIsTripModalOpen(false);
   }
 
   return (
@@ -148,33 +217,65 @@ function App() {
         <section className="trip-header">
           <div>
             <p className="eyebrow">MY TRIP</p>
-            <h1>{activeTrip ? activeTrip.title : "Chicago Weekend"}</h1>
+            <h1>{activeTrip.title}</h1>
 
             <p className="route">
-              {activeTrip
-                ? `${activeTrip.startLocation} → ${activeTrip.destination}`
-                : "Fort Wayne, IN → Chicago, IL"}
+              {`${activeTrip.startLocation} → ${activeTrip.destination}`}
             </p>
 
             <p className="dates">
-              {activeTrip
-                ? `${activeTrip.startDate} – ${activeTrip.endDate}`
-                : "October 16 – October 19, 2026"}
+              {`${activeTrip.startDate} – ${activeTrip.endDate}`}
             </p>
           </div>
 
           <div style={{ display: "flex", gap: "10px" }}>
             <button
               className="add-button"
-              onClick={() => {
-                setShowItemModal(false);
-                setIsTripModalOpen(true);
-              }}
+              onClick={handleOpenTripModal}
             >
               + Create Trip
             </button>
 
-            <button className="save-button">♡ Save Trip</button>
+            {hasSavedTrip && (
+              <>
+                <button
+                  className="save-button"
+                  onClick={handleEditTrip}
+                >
+                  ✏️ Edit Trip
+                </button>
+
+                <button
+                  className="save-button"
+                  onClick={handleDeleteTrip}
+                >
+                  🗑️ Delete Trip
+                </button>
+              </>
+            )}
+
+            <button
+              className="save-button"
+              onClick={() => {
+                if (!hasSavedTrip) {
+                  alert("Please create a trip first.");
+                  return;
+                }
+
+                try {
+                  localStorage.setItem(
+                    "trippin.currentTrip",
+                    JSON.stringify(trip)
+                  );
+
+                  alert("Trip saved successfully!");
+                } catch {
+                  alert("Unable to save the trip.");
+                }
+              }}
+            >
+              ♡ Save Trip
+            </button>
           </div>
         </section>
 
@@ -235,12 +336,13 @@ function App() {
         activeTrip={activeTrip}
       />
 
-      <TripForm // add trip form
+      <TripForm
         isOpen={isTripModalOpen}
-        onClose={() => setIsTripModalOpen(false)}
+        onClose={handleCloseTripModal}
         onSaveTrip={handleSaveTrip}
         tripDraft={tripDraft}
         setTripDraft={setTripDraft}
+        isEditing={isEditingTrip}
       />
     </div>
   );
