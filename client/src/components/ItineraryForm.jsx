@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { Autocomplete } from "@react-google-maps/api";
 
 const typeIcons = { // types of activities
   Flight: "✈️",
@@ -68,10 +69,14 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
     title: "",
     type: "Activity",
     location: "",
+    lat: null,
+    lng: null,
     date: "",
     time: "",
     notes: "",
   });
+
+  const autocompleteRef = useRef(null);
 
   useEffect(() => { // edit itenary items
     if (editingItem) {
@@ -79,6 +84,8 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
         title: editingItem.title || "",
         type: editingItem.type || "Activity",
         location: editingItem.location || "",
+        lat: editingItem.lat || null,
+        lng: editingItem.lng || null,
         date: editingItem.rawDate || "",
         time: editingItem.rawTime || "",
         notes: editingItem.notes || "",
@@ -88,12 +95,32 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
         title: "",
         type: "Activity",
         location: "",
+        lat: null,
+        lng: null,
         date: "",
         time: "",
         notes: "",
       });
     }
   }, [editingItem, isOpen]);
+
+  const onLoad = (autoInstance) => {
+    autocompleteRef.current = autoInstance;
+  };
+
+  const onPlaceChanged = () => {
+    if (autocompleteRef.current) {
+      const place = autocompleteRef.current.getPlace();
+      if (place.geometry && place.geometry.location) {
+        setForm((prev) => ({
+          ...prev,
+          location: place.formatted_address || place.name,
+          lat: place.geometry.location.lat(),
+          lng: place.geometry.location.lng(),
+        }));
+      }
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -153,6 +180,8 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
       title: form.title,
       time: formattedTime,
       location: form.location,
+      lat: form.lat,
+      lng: form.lng,
       notes: form.notes,
     };
 
@@ -207,12 +236,15 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
 
           <label>
             Location *
-            <input
-              name="location"
-              value={form.location}
-              onChange={handleChange}
-              placeholder="Example: Chicago Riverwalk"
-            />
+            {/*auto-suggest locations*/}
+            <Autocomplete onLoad={onLoad} onPlaceChanged={onPlaceChanged}>
+              <input
+                name="location"
+                value={form.location}
+                onChange={handleChange}
+                placeholder="Example: Chicago Riverwalk"
+              />
+            </Autocomplete>
           </label>
 
           <div className="form-row">

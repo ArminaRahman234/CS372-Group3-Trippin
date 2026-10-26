@@ -1,3 +1,6 @@
+import { useRef } from "react";
+import { Autocomplete } from "@react-google-maps/api";
+
 function TripForm({
   isOpen,
   onClose,
@@ -7,15 +10,46 @@ function TripForm({
   isEditing = false,
 }) { // object fields to store input data
 
+  const startAutoRef = useRef(null);
+  const destAutoRef = useRef(null);
+
   if (!isOpen) return null;
 
   function handleChange(event) { // temporary data safekeep
     const { name, value } = event.target;
-    setTripDraft({
-      ...tripDraft,
+    setTripDraft((prev) => ({
+      ...prev,
       [name]: value,
-    });
+    }));
   }
+
+  const onStartPlaceChanged = () => { // start location
+    if (startAutoRef.current) {
+      const place = startAutoRef.current.getPlace();
+      if (place.geometry && place.geometry.location) {
+        setTripDraft((prev) => ({
+          ...prev,
+          startLocation: place.formatted_address || place.name,
+          startLat: place.geometry.location.lat(),
+          startLng: place.geometry.location.lng(),
+        }));
+      }
+    }
+  };
+
+  const onDestPlaceChanged = () => { // destination location
+    if (destAutoRef.current) {
+      const place = destAutoRef.current.getPlace();
+      if (place.geometry && place.geometry.location) {
+        setTripDraft((prev) => ({
+          ...prev,
+          destination: place.formatted_address || place.name,
+          destLat: place.geometry.location.lat(),
+          destLng: place.geometry.location.lng(),
+        }));
+      }
+    }
+  };
 
   function handleSubmit(event) { // save the trip data
     event.preventDefault();
@@ -64,12 +98,14 @@ function TripForm({
         <div className="modal-header">
           <div>
             <p className="eyebrow">
-  {isEditing ? "EDIT TRIP" : "NEW TRIP"}
-</p>
-<h2>
-  {isEditing ? "Edit Your Trip" : "Create Your Trip"}
-</h2>
+              {isEditing ? "EDIT TRIP" : "NEW TRIP"}
+            </p>
+
+            <h2>
+              {isEditing ? "Edit Your Trip" : "Create Your Trip"}
+            </h2>
           </div>
+
           <button className="close-button" onClick={onClose}>
             ✕
           </button>
@@ -90,24 +126,36 @@ function TripForm({
           <div className="form-row">
             <label>
               Starting Location *
-              <input
-                type="text"
-                name="startLocation"
-                value={tripDraft.startLocation}
-                onChange={handleChange}
-                placeholder="Example: Fort Wayne, IN"
-              />
+              {/*auto-suggest locations*/}
+              <Autocomplete
+                  onLoad={(auto) => (startAutoRef.current = auto)}
+                  onPlaceChanged={onStartPlaceChanged}
+                >
+                  <input
+                    type="text"
+                    name="startLocation"
+                    value={tripDraft.startLocation}
+                    onChange={handleChange}
+                    placeholder="Example: Fort Wayne, IN"
+                  />
+                </Autocomplete>
             </label>
 
             <label>
               Destination *
-              <input
-                type="text"
-                name="destination"
-                value={tripDraft.destination}
-                onChange={handleChange}
-                placeholder="Example: Miami, FL"
-              />
+              {/*auto-suggest locations*/}
+              <Autocomplete
+                onLoad={(auto) => (destAutoRef.current = auto)}
+                onPlaceChanged={onDestPlaceChanged}
+              >
+                <input
+                  type="text"
+                  name="destination"
+                  value={tripDraft.destination}
+                  onChange={handleChange}
+                  placeholder="Example: Miami, FL"
+                />
+              </Autocomplete>
             </label>
           </div>
 
