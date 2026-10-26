@@ -317,7 +317,12 @@ function App() {
             </button>
           </div>
 
-          <MapContainer onAddBookmark={handleAddBookmark} /> {/*render map and spot search and bookmark*/}
+          {/*render map, spot search and bookmark, spot pins, route lines*/}
+          <MapContainer
+            onAddBookmark={handleAddBookmark}
+            activeTrip={activeTrip}
+            itineraryItems={items}
+          />
 
           <div className="timeline">
             {Object.keys(groupedItems).length === 0 ? (
