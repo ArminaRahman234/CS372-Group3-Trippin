@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import "./App.css";
 import TripForm from "./components/TripForm";
 import { ItineraryItem, ItineraryForm } from "./components/ItineraryForm";
+import MapContainer from "./components/MapContainer";
 
 import {
   getTrips,
@@ -141,7 +142,7 @@ function App() {
       return;
     }
 
-    setTrip(updatedTrip);
+    setTrips(updatedTrip);
     setTripDraft({ ...emptyTrip });
     setIsEditingTrip(false);
     setIsTripModalOpen(false);
@@ -149,7 +150,7 @@ function App() {
 
   // Open a blank form to create a new trip.
   function handleOpenTripModal() {
-    setShowModal(false);
+    setShowItemModal(false);
     setIsEditingTrip(false);
     setTripDraft({ ...emptyTrip });
     setIsTripModalOpen(true);
@@ -196,7 +197,7 @@ function App() {
       return;
     }
 
-    setTrip(updatedTrips);
+    setTrips(updatedTrips);
     setTripDraft({ ...emptyTrip });
     setIsEditingTrip(false);
     setIsTripModalOpen(false);
@@ -297,6 +298,8 @@ function App() {
               + Add Item
             </button>
           </div>
+
+          <MapContainer /> {/*render map*/}
 
           <div className="timeline">
             {Object.keys(groupedItems).length === 0 ? (
