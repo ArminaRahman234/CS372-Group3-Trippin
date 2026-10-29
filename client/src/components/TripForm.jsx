@@ -15,11 +15,13 @@ function TripForm({
 
   if (!isOpen) return null;
 
-  function handleChange(event) { // temporary data safekeep
+    function handleChange(event) { // temporary data safekeep
     const { name, value } = event.target;
     setTripDraft((prev) => ({
       ...prev,
       [name]: value,
+      ...(name === "startLocation" && { startLat: null, startLng: null }),
+      ...(name === "destination" && { destLat: null, destLng: null }),
     }));
   }
 

@@ -124,9 +124,13 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
 
   if (!isOpen) return null;
 
-  function handleChange(event) { // temporary data safekeep
+    function handleChange(event) { // temporary data safekeep
     const { name, value } = event.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === "location" && { lat: null, lng: null }), // typed text = old coords no longer valid
+    }));
   }
 
   function handleSubmit(event) { // save the data
