@@ -26,6 +26,29 @@ export function addTrip(tripData) {
   return trips;
 }
 
+export function updateTrip(tripId, updatedData) {
+  const trips = getTrips();
+  const updatedTrips = trips.map((trip) =>
+    trip.id === tripId ? { ...trip, ...updatedData } : trip
+  );
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedTrips));
+  return updatedTrips;
+}
+
+export function deleteTrip(tripId) {
+  const trips = getTrips();
+  const updatedTrips = trips.filter((trip) => trip.id !== tripId);
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedTrips));
+
+  //added to remove a trips itenerary items when we delete the trip so they arent in local storage
+  const remainingItems = getItineraryItems().filter((item) => item.tripId !== tripId);
+  localStorage.setItem(ITINERARY_KEY, JSON.stringify(remainingItems));
+
+  return updatedTrips;
+}
+
 export function getItineraryItems(tripId) { // access itinerary items
   try {
     const raw = localStorage.getItem(ITINERARY_KEY);

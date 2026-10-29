@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { Autocomplete } from "@react-google-maps/api";
 
 const typeIcons = { // types of activities
   Flight: "✈️",
@@ -68,10 +69,14 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
     title: "",
     type: "Activity",
     location: "",
+    lat: null,
+    lng: null,
     date: "",
     time: "",
     notes: "",
   });
+
+  const autocompleteRef = useRef(null);
 
   useEffect(() => { // edit itenary items
     if (editingItem) {
@@ -79,6 +84,8 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
         title: editingItem.title || "",
         type: editingItem.type || "Activity",
         location: editingItem.location || "",
+        lat: editingItem.lat || null,
+        lng: editingItem.lng || null,
         date: editingItem.rawDate || "",
         time: editingItem.rawTime || "",
         notes: editingItem.notes || "",
@@ -88,12 +95,32 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
         title: "",
         type: "Activity",
         location: "",
+        lat: null,
+        lng: null,
         date: "",
         time: "",
         notes: "",
       });
     }
   }, [editingItem, isOpen]);
+
+  const onLoad = (autoInstance) => {
+    autocompleteRef.current = autoInstance;
+  };
+
+  const onPlaceChanged = () => {
+    if (autocompleteRef.current) {
+      const place = autocompleteRef.current.getPlace();
+      if (place.geometry && place.geometry.location) {
+        setForm((prev) => ({
+          ...prev,
+          location: place.formatted_address || place.name,
+          lat: place.geometry.location.lat(),
+          lng: place.geometry.location.lng(),
+        }));
+      }
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -144,7 +171,7 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
     });
 
     const savedData = { // data storage
-      id: editingItem ? editingItem.id : Date.now(),
+      id: editingItem?.id || Date.now(),
       date: formattedDate,
       rawDate: form.date,
       rawTime: form.time,
@@ -153,6 +180,8 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
       title: form.title,
       time: formattedTime,
       location: form.location,
+      lat: form.lat,
+      lng: form.lng,
       notes: form.notes,
     };
 
@@ -172,7 +201,7 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
         <div className="modal-header">
           <div>
             <p className="eyebrow">TRIP PLANNER</p>
-            <h2>{editingItem ? "Edit Itinerary Item" : "Add Itinerary Item"}</h2>
+            <h2>{editingItem?.id ? "Edit Itinerary Item" : "Add Itinerary Item"}</h2>
           </div>
 
           <button className="close-button" onClick={onClose}>
@@ -207,12 +236,16 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
 
           <label>
             Location *
-            <input
-              name="location"
-              value={form.location}
-              onChange={handleChange}
-              placeholder="Example: Chicago Riverwalk"
-            />
+            {/*auto-suggest locations*/}
+            <Autocomplete onLoad={onLoad} onPlaceChanged={onPlaceChanged}>
+              <input
+                name="location"
+                value={form.location}
+                onChange={handleChange}
+                onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+                placeholder="Example: Chicago Riverwalk"
+              />
+            </Autocomplete>
           </label>
 
           <div className="form-row">
@@ -254,7 +287,7 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
             </button>
             
             <button type="submit" className="submit-button">
-              {editingItem ? "Update Item" : "Add to Itinerary"}
+              {editingItem?.id ? "Update Item" : "Add to Itinerary"}
             </button>
           </div>
         </form>

@@ -7,6 +7,8 @@ import MapContainer from "./components/MapContainer";
 import {
   getTrips,
   addTrip,
+  updateTrip,
+  deleteTrip,
   getItineraryItems,
   saveItineraryItem,
   deleteItineraryItem,
@@ -129,23 +131,22 @@ function App() {
 
   // Save a newly created trip or update an existing trip.
   function handleSaveTrip(newTripData) {
+  let updatedTrips;
 
-    let updatedTrips;
+  try {
+    updatedTrips =
+      isEditingTrip && hasSavedTrip
+        ? updateTrip(activeTrip.id, newTripData)
+        : addTrip(newTripData);
+  } catch {
+    alert("Unable to save this trip to local storage.");
+    return;
+  }
 
-    try {
-      updatedTrips =
-        isEditingTrip && hasSavedTrip
-          ? updatedTrip(activeTrip.id, newTripData)
-          : addTrip(newTripData);
-    } catch {
-      alert("Unable to save this trip to local storage.");
-      return;
-    }
-
-    setTrips(updatedTrip);
-    setTripDraft({ ...emptyTrip });
-    setIsEditingTrip(false);
-    setIsTripModalOpen(false);
+  setTrips(updatedTrips);
+  setTripDraft({ ...emptyTrip });
+  setIsEditingTrip(false);
+  setIsTripModalOpen(false);
   }
 
   // Open a blank form to create a new trip.
@@ -201,6 +202,23 @@ function App() {
     setTripDraft({ ...emptyTrip });
     setIsEditingTrip(false);
     setIsTripModalOpen(false);
+  }
+
+  function handleAddBookmark(bookmarkData) { // open form with bookmarked spot pre-filled
+    setEditingItem({
+      id: null,
+      title: bookmarkData.title || "",
+      type: "Saved Spot",
+      location: bookmarkData.location || "",
+      lat: bookmarkData.lat || null,
+      lng: bookmarkData.lng || null,
+      rawDate: "",
+      rawTime: "",
+      notes: "",
+    });
+
+    setIsTripModalOpen(false);
+    setShowItemModal(true);
   }
 
   return (
@@ -266,7 +284,7 @@ function App() {
                 try {
                   localStorage.setItem(
                     "trippin.currentTrip",
-                    JSON.stringify(trip)
+                    JSON.stringify(activeTrip)
                   );
 
                   alert("Trip saved successfully!");
@@ -299,7 +317,7 @@ function App() {
             </button>
           </div>
 
-          <MapContainer /> {/*render map*/}
+          <MapContainer onAddBookmark={handleAddBookmark} /> {/*render map and spot search and bookmark*/}
 
           <div className="timeline">
             {Object.keys(groupedItems).length === 0 ? (
