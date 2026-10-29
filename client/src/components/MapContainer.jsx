@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { GoogleMap, useJsApiLoader, Marker, Polyline } from "@react-google-maps/api";
 import PlaceSearch from "./PlaceSearch";
 
@@ -16,7 +16,7 @@ const defaultCenter = { // default map view Chicago
 const LIBRARIES = ["places"];
 
 export function MapContainer({onAddBookmark, activeTrip, itineraryItems = []}) {
-  const mapRef = useRef(null);
+  const [map, setMap] = useState(null);
 
   const { isLoaded, loadError } = useJsApiLoader({ // load map
     id: "google-map-script",
@@ -24,12 +24,12 @@ export function MapContainer({onAddBookmark, activeTrip, itineraryItems = []}) {
     libraries: LIBRARIES, // spots api library
   });
 
-  const onLoad = useCallback((map) => {
-    mapRef.current = map;
+  const onLoad = useCallback((mapInstance) => {
+    setMap(mapInstance);
   }, []);
 
   const onUnmount = useCallback(() => {
-    mapRef.current = null;
+    setMap(null);
   }, []);
 
   const [routeMode, setRouteMode] = useState("all");
@@ -73,17 +73,19 @@ export function MapContainer({onAddBookmark, activeTrip, itineraryItems = []}) {
     return pts;
   }, [activeTrip, itineraryItems, routeMode, selectedDay]);
 
-  useEffect(() => { 
-    if (mapRef.current && points.length > 0 && window.google) {
-      const bounds = new window.google.maps.LatLngBounds();
-      points.forEach((pt) => bounds.extend({ lat: pt.lat, lng: pt.lng }));
-      mapRef.current.fitBounds(bounds);
+    useEffect(() => {
+    if (!map || points.length === 0 || !window.google) return;
 
-      if (points.length === 1) {
-        mapRef.current.setZoom(12);
-      }
+    if (points.length === 1) {
+      map.setCenter(points[0]);
+      map.setZoom(12);
+      return;
     }
-  }, [points, isLoaded]);
+
+    const bounds = new window.google.maps.LatLngBounds();
+    points.forEach((pt) => bounds.extend({ lat: pt.lat, lng: pt.lng }));
+    map.fitBounds(bounds);
+  }, [map, points]);
 
   const polylinePath = points.map((pt) => ({ lat: pt.lat, lng: pt.lng }));
 
