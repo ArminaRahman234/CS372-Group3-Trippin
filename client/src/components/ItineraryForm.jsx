@@ -171,7 +171,7 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
     });
 
     const savedData = { // data storage
-      id: editingItem ? editingItem.id : Date.now(),
+      id: editingItem?.id || Date.now(),
       date: formattedDate,
       rawDate: form.date,
       rawTime: form.time,
@@ -201,7 +201,7 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
         <div className="modal-header">
           <div>
             <p className="eyebrow">TRIP PLANNER</p>
-            <h2>{editingItem ? "Edit Itinerary Item" : "Add Itinerary Item"}</h2>
+            <h2>{editingItem?.id ? "Edit Itinerary Item" : "Add Itinerary Item"}</h2>
           </div>
 
           <button className="close-button" onClick={onClose}>
@@ -242,6 +242,7 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
                 name="location"
                 value={form.location}
                 onChange={handleChange}
+                onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 placeholder="Example: Chicago Riverwalk"
               />
             </Autocomplete>
@@ -286,7 +287,7 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
             </button>
             
             <button type="submit" className="submit-button">
-              {editingItem ? "Update Item" : "Add to Itinerary"}
+              {editingItem?.id ? "Update Item" : "Add to Itinerary"}
             </button>
           </div>
         </form>

@@ -93,7 +93,7 @@ export function MapContainer({onAddBookmark, activeTrip, itineraryItems = []}) {
 
   return (
     <div className="map-wrapper" style={{ marginBottom: "30px" }}>
-        <PlaceSearch onAddBookmark={onAddBookmark} /> // render spot search and bookmark
+        <PlaceSearch onAddBookmark={onAddBookmark} /> {/* render spot search and bookmark*/}
       
         {/*route filters*/}
         <div style={{ display: "flex", gap: "10px", marginBottom: "10px", alignItems: "center", flexWrap: "wrap" }}>
