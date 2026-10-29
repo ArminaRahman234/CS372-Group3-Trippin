@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import "./App.css";
 import TripForm from "./components/TripForm";
 import { ItineraryItem, ItineraryForm } from "./components/ItineraryForm";
@@ -93,12 +93,12 @@ function App() {
   const [isEditingTrip, setIsEditingTrip] = useState(false);
   const [tripDraft, setTripDraft] = useState({...emptyTrip});
 
-  const sortedItems = [...items].sort((a, b) => { // sort itenary items list
-    const dateA = a.rawDate ? new Date(`${a.rawDate}T00:00:00`) : new Date(a.date);
-    const dateB = b.rawDate ? new Date(`${b.rawDate}T00:00:00`) : new Date(b.date);
+    const sortedItems = useMemo(() => [...items].sort((a, b) => { // sort itenary items list by date, then time
+    const dateA = a.rawDate ? new Date(`${a.rawDate}T${a.rawTime || "00:00"}`) : new Date(a.date);
+    const dateB = b.rawDate ? new Date(`${b.rawDate}T${b.rawTime || "00:00"}`) : new Date(b.date);
 
     return dateA - dateB;
-  });
+  }), [items]);
 
   const groupedItems = sortedItems.reduce((groups, item) => { // group itenary items by date
     if (!groups[item.date]) {
@@ -321,7 +321,7 @@ function App() {
           <MapContainer
             onAddBookmark={handleAddBookmark}
             activeTrip={activeTrip}
-            itineraryItems={items}
+            itineraryItems={sortedItems}
           />
 
           <div className="timeline">
