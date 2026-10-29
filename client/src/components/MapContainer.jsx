@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { GoogleMap, useJsApiLoader, Marker, Polyline } from "@react-google-maps/api";
+import { MAPS_LOADER_OPTIONS } from "../services/mapsConfig";
 import PlaceSearch from "./PlaceSearch";
 
 const containerStyle = {
@@ -13,16 +14,10 @@ const defaultCenter = { // default map view Chicago
   lng: -87.6298,
 };
 
-const LIBRARIES = ["places"];
-
 export function MapContainer({onAddBookmark, activeTrip, itineraryItems = []}) {
   const [map, setMap] = useState(null);
 
-  const { isLoaded, loadError } = useJsApiLoader({ // load map
-    id: "google-map-script",
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries: LIBRARIES, // spots api library
-  });
+  const { isLoaded, loadError } = useJsApiLoader(MAPS_LOADER_OPTIONS); // load map
 
   const onLoad = useCallback((mapInstance) => {
     setMap(mapInstance);
