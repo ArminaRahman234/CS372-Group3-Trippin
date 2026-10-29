@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect, useState } from "react";
+import { useCallback, useRef, useEffect, useState, useMemo } from "react";
 import { GoogleMap, useJsApiLoader, Marker, Polyline } from "@react-google-maps/api";
 import PlaceSearch from "./PlaceSearch";
 
@@ -35,41 +35,45 @@ export function MapContainer({onAddBookmark, activeTrip, itineraryItems = []}) {
   const [routeMode, setRouteMode] = useState("all");
   const [selectedDay, setSelectedDay] = useState("all");
 
-  const points = [];
+    const availableDays = useMemo( // available days to filter map
+    () => Array.from(new Set(itineraryItems.map((item) => item.rawDate).filter(Boolean))).sort(),
+    [itineraryItems]
+  );
 
-    if (routeMode === "all" && activeTrip?.startLat && activeTrip?.startLng) { // coordinates for start
-        points.push({
+  
+  const points = useMemo(() => {
+    const pts = [];
+
+    if (routeMode === "all" && activeTrip?.startLat && activeTrip?.startLng) { 
+      pts.push({
         lat: Number(activeTrip.startLat),
         lng: Number(activeTrip.startLng),
         title: `Start: ${activeTrip.startLocation || "Start Point"}`,
-        });
+      });
     }
 
-  const availableDays = Array.from( // available days to filter map
-    new Set(itineraryItems.map((item) => item.rawDate).filter(Boolean))
-  );
-
-    itineraryItems.forEach((item) => { // coordinates for spots
-        if (item.lat && item.lng) {
-        if (selectedDay === "all" || item.rawDate === selectedDay) {
-            points.push({
-            lat: Number(item.lat),
-            lng: Number(item.lng),
-            title: item.title || item.location,
-            });
-        }
-        }
+    itineraryItems.forEach((item) => { 
+      if (item.lat && item.lng && (selectedDay === "all" || item.rawDate === selectedDay)) {
+        pts.push({
+          lat: Number(item.lat),
+          lng: Number(item.lng),
+          title: item.title || item.location,
+        });
+      }
     });
 
-    if (routeMode === "all" && activeTrip?.destLat && activeTrip?.destLng) { // coordinates for destination
-        points.push({
+    if (routeMode === "all" && activeTrip?.destLat && activeTrip?.destLng) { 
+      pts.push({
         lat: Number(activeTrip.destLat),
         lng: Number(activeTrip.destLng),
         title: `Destination: ${activeTrip.destination || "End Point"}`,
-        });
+      });
     }
 
-  useEffect(() => { // fit all locations in map
+    return pts;
+  }, [activeTrip, itineraryItems, routeMode, selectedDay]);
+
+  useEffect(() => { 
     if (mapRef.current && points.length > 0 && window.google) {
       const bounds = new window.google.maps.LatLngBounds();
       points.forEach((pt) => bounds.extend({ lat: pt.lat, lng: pt.lng }));
@@ -159,7 +163,7 @@ export function MapContainer({onAddBookmark, activeTrip, itineraryItems = []}) {
         {/*render map*/}
         <GoogleMap
             mapContainerStyle={containerStyle}
-            center={points[0] || defaultCenter}
+            center={defaultCenter}
             zoom={12}
             onLoad={onLoad}
             onUnmount={onUnmount}
