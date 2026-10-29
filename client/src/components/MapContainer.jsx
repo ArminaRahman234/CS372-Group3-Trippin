@@ -42,7 +42,7 @@ export function MapContainer({ onAddBookmark }) {
 
   return (
     <div className="map-wrapper" style={{ marginBottom: "30px" }}>
-      <PlaceSearch onAddBookmark={onAddBookmark} /> // render spot search and bookmark
+      <PlaceSearch onAddBookmark={onAddBookmark} /> {/* render spot search and bookmark */}
 
       <GoogleMap // render map
         mapContainerStyle={containerStyle}
