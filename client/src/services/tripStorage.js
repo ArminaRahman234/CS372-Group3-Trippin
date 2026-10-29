@@ -41,6 +41,11 @@ export function deleteTrip(tripId) {
   const updatedTrips = trips.filter((trip) => trip.id !== tripId);
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedTrips));
+
+  //added to remove a trips itenerary items when we delete the trip so they arent in local storage
+  const remainingItems = getItineraryItems().filter((item) => item.tripId !== tripId);
+  localStorage.setItem(ITINERARY_KEY, JSON.stringify(remainingItems));
+
   return updatedTrips;
 }
 
