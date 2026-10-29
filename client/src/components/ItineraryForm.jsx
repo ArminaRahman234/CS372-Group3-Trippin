@@ -242,6 +242,7 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
                 name="location"
                 value={form.location}
                 onChange={handleChange}
+                onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 placeholder="Example: Chicago Riverwalk"
               />
             </Autocomplete>

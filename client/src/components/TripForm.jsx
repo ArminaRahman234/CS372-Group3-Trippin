@@ -136,6 +136,7 @@ function TripForm({
                     name="startLocation"
                     value={tripDraft.startLocation}
                     onChange={handleChange}
+                    onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                     placeholder="Example: Fort Wayne, IN"
                   />
                 </Autocomplete>
@@ -153,6 +154,7 @@ function TripForm({
                   name="destination"
                   value={tripDraft.destination}
                   onChange={handleChange}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                   placeholder="Example: Miami, FL"
                 />
               </Autocomplete>
