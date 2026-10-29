@@ -12,7 +12,7 @@ const typeIcons = { // types of activities
   "Saved Spot": "📍",
 };
 
-export function ItineraryItem({ item, onEdit, onDelete }) { // display
+export function ItineraryItem({ item, travel, onEdit, onDelete }) { // display
   return (
     <article className="itinerary-card">
       <div className="item-icon">{item.icon}</div>
@@ -57,6 +57,12 @@ export function ItineraryItem({ item, onEdit, onDelete }) { // display
           <span>🕐 {item.time}</span>
           <span>📍 {item.location}</span>
         </div>
+
+        {travel &&(
+          <div className="travel-badge">
+           🚗 {travel.duration} · {travel.distance} from {travel.from}
+          </div>
+        )}
 
         {item.notes && <p className="notes">{item.notes}</p>}
       </div>
