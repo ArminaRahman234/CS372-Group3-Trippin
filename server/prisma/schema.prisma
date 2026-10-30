@@ -1,0 +1,90 @@
+// Database schema for Trippin (issue #12).
+// After changing this file, run `npm run db:migrate` to update the database.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Expense categories from the README's budget section.
+enum ExpenseCategory {
+  LODGING
+  TRANSPORTATION
+  MEALS
+  ACTIVITIES
+  SHOPPING
+  OTHER
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trips Trip[]
+}
+
+model Trip {
+  id            String   @id @default(uuid())
+  title         String
+  startLocation String
+  destination   String
+  startDate     DateTime @db.Date
+  endDate       DateTime @db.Date
+  budget        Decimal? @db.Decimal(10, 2)
+  isBookmarked  Boolean  @default(false) // saved trips manager (#11)
+  shareToken    String?  @unique // view-only share links (#16)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Optional until we add login, so trips can be saved without a user.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Deleting a trip also deletes its itinerary items and expenses.
+  itineraryItems ItineraryItem[]
+  expenses       Expense[]
+
+  @@index([userId])
+}
+
+model ItineraryItem {
+  id        String   @id @default(uuid())
+  title     String
+  type      String   @default("Activity") // Flight, Hotel, Activity, Park, Shopping, Food, Transportation, Saved Spot
+  location  String
+  lat       Float?
+  lng       Float?
+  date      DateTime @db.Date
+  time      String // "HH:MM", same as the form's time input
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, date])
+}
+
+model Expense {
+  id          String          @id @default(uuid())
+  description String
+  amount      Decimal         @db.Decimal(10, 2)
+  category    ExpenseCategory @default(OTHER)
+  date        DateTime        @db.Date
+  receiptUrl  String? // receipt uploads stretch goal (#17)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+}

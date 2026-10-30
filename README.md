@@ -158,12 +158,29 @@ npm run dev
 
 **Server** (http://localhost:5000)
 
+The server needs a PostgreSQL database. Install PostgreSQL locally (for example `brew install postgresql@16` on macOS), then:
+
 ```bash
 cd server
 npm install
+createdb trippin                 # make an empty database
+cp .env.example .env             # then set DATABASE_URL in .env
+npm run db:migrate               # create the tables from prisma/schema.prisma
+npm run db:seed                  # optional: add a demo trip
 npm run dev
 ```
-To check the server is running, visit http://localhost:5000/api/health. 
+To check the server is running, visit http://localhost:5000/api/health. To check it can reach the database, visit http://localhost:5000/api/health/db.
+
+**Database commands** (run inside `server/`)
+
+| Command | What it does |
+| --- | --- |
+| `npm run db:migrate` | Applies new migrations. After editing `schema.prisma`, it also creates a migration for the change |
+| `npm run db:seed` | Adds a demo user and trip |
+| `npm run db:studio` | Opens Prisma Studio to browse the data in your browser |
+| `npm run db:reset` | Deletes all data and re-runs every migration |
+
+The schema lives in `server/prisma/schema.prisma` and has four tables: `User`, `Trip`, `ItineraryItem` and `Expense`. Deleting a trip also deletes its itinerary items and expenses.
 
 Environment variables such as database credentials and Google Maps API keys should be stored in a `.env` file and should **not** be committed to GitHub.
 
