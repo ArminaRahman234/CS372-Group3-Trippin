@@ -10,48 +10,20 @@ import {
   updateTrip,
   deleteTrip,
   getItineraryItems,
-  saveItineraryItem,
+  createItineraryItem,
+  updateItineraryItem,
   deleteItineraryItem,
-} from "./services/tripStorage";
+} from "./services/api";
 
-const defaultTrip = { // temporary sample data for UI
-  id: "default-chicago",
-  title: "Chicago Weekend",
-  startLocation: "Fort Wayne, IN",
-  destination: "Chicago, IL",
-  startDate: "2026-10-16",
-  endDate: "2026-10-19",
+// shown only while there are no saved trips
+const placeholderTrip = {
+  id: null,
+  title: "No trip yet",
+  startLocation: "Start",
+  destination: "Destination",
+  startDate: "",
+  endDate: "",
 };
-
-const startingItems = [
-  {
-    id: 1,
-    tripId: "default-chicago",
-    date: "Friday, October 16",
-    rawDate: "2026-10-16",
-    rawTime: "10:00",
-    icon: "🚗",
-    type: "Transportation",
-    title: "Drive to Chicago",
-    time: "10:00 AM",
-    location: "Fort Wayne, IN → Chicago, IL",
-    notes: "Estimated travel time: 3 hr 15 min",
-  },
-
-  {
-    id: 2,
-    tripId: "default-chicago",
-    date: "Friday, October 16",
-    rawDate: "2026-10-16",
-    rawTime: "15:00",
-    icon: "🏨",
-    type: "Hotel",
-    title: "Hotel Check-In",
-    time: "3:00 PM",
-    location: "Hyatt Regency Chicago",
-    notes: "151 E Wacker Dr, Chicago",
-  },
-];
 
 const emptyTrip = {
   title: "",
@@ -62,28 +34,57 @@ const emptyTrip = {
 };
 
 function App() {
-  const [trips, setTrips] = useState(() => getTrips());
+  const [trips, setTrips] = useState([]);
+  const [activeTripId, setActiveTripId] = useState(null);
+  const [items, setItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+
   const hasSavedTrip = trips.length > 0;
-  const activeTrip = hasSavedTrip ? trips[trips.length - 1] : defaultTrip; // default to last trip
+  // default to the last trip when nothing is selected (or the selected one was deleted)
+  const activeTrip =
+    trips.find((trip) => trip.id === activeTripId) || trips[trips.length - 1] || placeholderTrip;
 
-  const [items, setItems] = useState(() => {
-    const storedItems = getItineraryItems(activeTrip.id);
-
-    if (storedItems.length === 0 && activeTrip.id === "default-chicago") {
-      return startingItems;
-    }
-
-    return storedItems;
-  });
-
+  // load every saved trip from the API once on startup
   useEffect(() => {
-    const storedItems = getItineraryItems(activeTrip.id);
+    let cancelled = false;
 
-    if (storedItems.length === 0 && activeTrip.id === "default-chicago") {
-      setItems(startingItems);
-    } else {
-      setItems(storedItems);
+    getTrips()
+      .then((loaded) => {
+        if (!cancelled) setTrips(loaded);
+      })
+      .catch((err) => {
+        if (!cancelled) setErrorMessage(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // load the itinerary whenever the selected trip changes
+  useEffect(() => {
+    if (!activeTrip.id) {
+      setItems([]);
+      return;
     }
+
+    let cancelled = false;
+
+    getItineraryItems(activeTrip.id)
+      .then((loaded) => {
+        if (!cancelled) setItems(loaded);
+      })
+      .catch((err) => {
+        if (!cancelled) setErrorMessage(err.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeTrip.id]);
 
   const [showItemModal, setShowItemModal] = useState(false);
@@ -110,16 +111,36 @@ function App() {
   }, {});
 
 
-  function handleSaveItem(itemData) {
-    const updated = saveItineraryItem(itemData, activeTrip?.id);
-    setItems(updated);
+  async function handleSaveItem(itemData) {
+    if (!activeTrip.id) {
+      alert("Please create a trip first.");
+      return;
+    }
+
+    try {
+      if (editingItem?.id) {
+        const saved = await updateItineraryItem(activeTrip.id, editingItem.id, itemData);
+        setItems((prev) => prev.map((item) => (item.id === saved.id ? saved : item)));
+      } else {
+        const saved = await createItineraryItem(activeTrip.id, itemData);
+        setItems((prev) => [...prev, saved]);
+      }
+      setErrorMessage("");
+    } catch (err) {
+      alert(`Unable to save this item: ${err.message}`);
+    }
+
     setEditingItem(null);
   }
 
-  function handleDeleteItem(itemId) {
-    if (window.confirm("Are you sure you want to delete this item?")) {
-      const updated = deleteItineraryItem(itemId, activeTrip?.id);
-      setItems(updated);
+  async function handleDeleteItem(itemId) {
+    if (!window.confirm("Are you sure you want to delete this item?")) return;
+
+    try {
+      await deleteItineraryItem(activeTrip.id, itemId);
+      setItems((prev) => prev.filter((item) => item.id !== itemId));
+    } catch (err) {
+      alert(`Unable to delete this item: ${err.message}`);
     }
   }
 
@@ -130,23 +151,24 @@ function App() {
   }
 
   // Save a newly created trip or update an existing trip.
-  function handleSaveTrip(newTripData) {
-  let updatedTrips;
+  async function handleSaveTrip(newTripData) {
+    try {
+      if (isEditingTrip && hasSavedTrip) {
+        const saved = await updateTrip(activeTrip.id, newTripData);
+        setTrips((prev) => prev.map((trip) => (trip.id === saved.id ? saved : trip)));
+      } else {
+        const saved = await addTrip(newTripData);
+        setTrips((prev) => [...prev, saved]);
+        setActiveTripId(saved.id); // jump to the trip that was just created
+      }
+    } catch (err) {
+      alert(`Unable to save this trip: ${err.message}`);
+      return;
+    }
 
-  try {
-    updatedTrips =
-      isEditingTrip && hasSavedTrip
-        ? updateTrip(activeTrip.id, newTripData)
-        : addTrip(newTripData);
-  } catch {
-    alert("Unable to save this trip to local storage.");
-    return;
-  }
-
-  setTrips(updatedTrips);
-  setTripDraft({ ...emptyTrip });
-  setIsEditingTrip(false);
-  setIsTripModalOpen(false);
+    setTripDraft({ ...emptyTrip });
+    setIsEditingTrip(false);
+    setIsTripModalOpen(false);
   }
 
   // Open a blank form to create a new trip.
@@ -175,12 +197,16 @@ function App() {
       destination: activeTrip.destination || "",
       startDate: activeTrip.startDate || "",
       endDate: activeTrip.endDate || "",
+      startLat: activeTrip.startLat ?? null,
+      startLng: activeTrip.startLng ?? null,
+      destLat: activeTrip.destLat ?? null,
+      destLng: activeTrip.destLng ?? null,
     });
     setIsTripModalOpen(true);
   }
 
   // Delete the current trip after confirmation.
-  function handleDeleteTrip() {
+  async function handleDeleteTrip() {
     if (!hasSavedTrip) return;
 
     const confirmed = window.confirm(
@@ -189,19 +215,33 @@ function App() {
 
     if (!confirmed) return;
 
-    let updatedTrips;
-
     try {
-      updatedTrips = deleteTrip(activeTrip.id);
-    } catch {
-      alert("Unable to delete the trip from local storage.");
+      await deleteTrip(activeTrip.id);
+    } catch (err) {
+      alert(`Unable to delete the trip: ${err.message}`);
       return;
     }
 
-    setTrips(updatedTrips);
+    setTrips((prev) => prev.filter((trip) => trip.id !== activeTrip.id));
+    setActiveTripId(null);
     setTripDraft({ ...emptyTrip });
     setIsEditingTrip(false);
     setIsTripModalOpen(false);
+  }
+
+  // Bookmark (or un-bookmark) the current trip in the database.
+  async function handleToggleSaveTrip() {
+    if (!hasSavedTrip) {
+      alert("Please create a trip first.");
+      return;
+    }
+
+    try {
+      const saved = await updateTrip(activeTrip.id, { isBookmarked: !activeTrip.isBookmarked });
+      setTrips((prev) => prev.map((trip) => (trip.id === saved.id ? saved : trip)));
+    } catch (err) {
+      alert(`Unable to save the trip: ${err.message}`);
+    }
   }
 
   function handleAddBookmark(bookmarkData) { // open form with bookmarked spot pre-filled
@@ -233,9 +273,25 @@ function App() {
       </header>
 
       <main className="container">
+        {isLoading && <p style={{ color: "#64748b" }}>Loading your trips...</p>}
+        {errorMessage && <p style={{ color: "#ef4444" }}>{errorMessage}</p>}
+
         <section className="trip-header">
           <div>
             <p className="eyebrow">MY TRIP</p>
+            {trips.length > 1 && (
+              <select
+                value={activeTrip.id}
+                onChange={(event) => setActiveTripId(event.target.value)}
+                aria-label="Choose a trip"
+              >
+                {trips.map((trip) => (
+                  <option key={trip.id} value={trip.id}>
+                    {trip.title}
+                  </option>
+                ))}
+              </select>
+            )}
             <h1>{activeTrip.title}</h1>
 
             <p className="route">
@@ -243,7 +299,7 @@ function App() {
             </p>
 
             <p className="dates">
-              {`${activeTrip.startDate} – ${activeTrip.endDate}`}
+              {activeTrip.startDate ? `${activeTrip.startDate} – ${activeTrip.endDate}` : ""}
             </p>
           </div>
 
@@ -275,25 +331,9 @@ function App() {
 
             <button
               className="save-button"
-              onClick={() => {
-                if (!hasSavedTrip) {
-                  alert("Please create a trip first.");
-                  return;
-                }
-
-                try {
-                  localStorage.setItem(
-                    "trippin.currentTrip",
-                    JSON.stringify(activeTrip)
-                  );
-
-                  alert("Trip saved successfully!");
-                } catch {
-                  alert("Unable to save the trip.");
-                }
-              }}
+              onClick={handleToggleSaveTrip}
             >
-              ♡ Save Trip
+              {activeTrip.isBookmarked ? "♥ Saved" : "♡ Save Trip"}
             </button>
           </div>
         </section>

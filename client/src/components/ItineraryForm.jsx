@@ -1,16 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Autocomplete } from "@react-google-maps/api";
+import { typeIcons } from "../services/api";
 
-const typeIcons = { // types of activities
-  Flight: "✈️",
-  Hotel: "🏨",
-  Activity: "🎟️",
-  Park: "🌳",
-  Shopping: "🛍️",
-  Food: "🍽️",
-  Transportation: "🚗",
-  "Saved Spot": "📍",
-};
 
 export function ItineraryItem({ item, onEdit, onDelete }) { // display
   return (
