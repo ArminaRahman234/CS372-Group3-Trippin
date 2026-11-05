@@ -3,6 +3,7 @@ import "./App.css";
 import TripForm from "./components/TripForm";
 import { ItineraryItem, ItineraryForm } from "./components/ItineraryForm";
 import MapContainer from "./components/MapContainer";
+import { useTravelTimes } from "./hooks/useTravelTimes";
 
 import {
   getTrips,
@@ -99,6 +100,8 @@ function App() {
 
     return dateA - dateB;
   }), [items]);
+
+  const travelTimes = useTravelTimes(sortedItems);
 
   const groupedItems = sortedItems.reduce((groups, item) => { // group itenary items by date
     if (!groups[item.date]) {
@@ -337,6 +340,7 @@ function App() {
                       <ItineraryItem
                         key={item.id}
                         item={item}
+                        travel={travelTimes[item.id]}
                         onEdit={handleEditItem}
                         onDelete={handleDeleteItem}
                       />

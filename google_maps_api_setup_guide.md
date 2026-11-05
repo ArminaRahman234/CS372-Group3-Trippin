@@ -23,6 +23,7 @@ For full application functionality, you must enable **three specific APIs** with
    - **Maps JavaScript API** *(Handles core map rendering, markers, and polylines)*
    - **Places API** *(Legacy API required for standard Places search and Autocomplete support)*
    - **Places API (New)** *(Required for modern place place details and updated autocomplete features)*
+   - **Routes API** *(Travel time and distance between itinerary stops)*
 
 ---
 
@@ -40,10 +41,11 @@ For full application functionality, you must enable **three specific APIs** with
    - For **Production**: Set to **Websites** and add your deployment domain(s).
 3. Under **API restrictions**:
    - Choose **Restrict key**.
-   - Select the following **3 APIs** from the dropdown menu:
+   - Select the following **4 APIs** from the dropdown menu:
      - `Maps JavaScript API`
      - `Places API`
      - `Places API (New)`
+     - `Routes API`
 4. Scroll to the bottom and click **Save**.
 
 > ⚠️ **Propagation Delay Notice:** Changes to Google Cloud API key restrictions can take **up to 5 minutes** to propagate globally across Google's edge servers.
