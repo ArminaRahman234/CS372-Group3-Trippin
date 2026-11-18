@@ -35,6 +35,10 @@ model Trip {
   title         String
   startLocation String
   destination   String
+  startLat      Float? // coordinates from the Google Places autocomplete (map pins)
+  startLng      Float?
+  destLat       Float?
+  destLng       Float?
   startDate     DateTime @db.Date
   endDate       DateTime @db.Date
   budget        Decimal? @db.Decimal(10, 2)

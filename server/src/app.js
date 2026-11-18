@@ -3,6 +3,7 @@
 const express = require('express');
 const cors = require('cors');
 const prisma = require('./db');
+const tripRoutes = require('./routes/trips');
 
 // creates the server object
 const app = express();
@@ -27,6 +28,13 @@ app.get('/api/health/db', async (req, res) => {
   }
 });
 
-// routes for trips, itinerary items and expenses go here (#13, #14)
+// trips and their itinerary items
+app.use('/api/trips', tripRoutes);
+
+// catches anything thrown inside a route (bad ids, database errors) so the client gets json back
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Something went wrong on the server' });
+});
 
 module.exports = app;
