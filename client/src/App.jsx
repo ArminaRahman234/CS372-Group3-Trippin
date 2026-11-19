@@ -4,16 +4,23 @@ import TripForm from "./components/TripForm";
 import { ItineraryItem, ItineraryForm } from "./components/ItineraryForm";
 import MapContainer from "./components/MapContainer";
 import { useTravelTimes } from "./hooks/useTravelTimes";
+import ExpenseTracker from "./components/ExpenseTracker";
 
 import {
   getTrips,
   addTrip,
   updateTrip,
   deleteTrip,
+  shareTrip,
+  getSharedTrip,
   getItineraryItems,
   createItineraryItem,
   updateItineraryItem,
   deleteItineraryItem,
+  getExpenses,
+  createExpense,
+  updateExpense,
+  deleteExpense,
 } from "./services/api";
 
 // shown only while there are no saved trips
@@ -24,6 +31,7 @@ const placeholderTrip = {
   destination: "Destination",
   startDate: "",
   endDate: "",
+  budget: null
 };
 
 const emptyTrip = {
@@ -32,6 +40,7 @@ const emptyTrip = {
   destination: "",
   startDate: "",
   endDate: "",
+  budget: ""
 };
 
 function App() {
@@ -70,14 +79,21 @@ function App() {
   useEffect(() => {
     if (!activeTrip.id) {
       setItems([]);
+      setExpenses([]);
       return;
     }
 
     let cancelled = false;
 
-    getItineraryItems(activeTrip.id)
-      .then((loaded) => {
-        if (!cancelled) setItems(loaded);
+    Promise.all([
+      getItineraryItems(activeTrip.id),
+      getExpenses(activeTrip.id),
+    ])
+      .then(([loadedItems, loadedExpenses]) => {
+        if (!cancelled) {
+          setItems(loadedItems);
+          setExpenses(loadedExpenses);
+        }
       })
       .catch((err) => {
         if (!cancelled) setErrorMessage(err.message);
@@ -95,12 +111,124 @@ function App() {
   const [isEditingTrip, setIsEditingTrip] = useState(false);
   const [tripDraft, setTripDraft] = useState({...emptyTrip});
 
-    const sortedItems = useMemo(() => [...items].sort((a, b) => { // sort itenary items list by date, then time
+  const [expenses, setExpenses] = useState([]);
+  const [activeTab, setActiveTab] = useState("trips"); // "trips" | "budget"
+  const [prefilledExpense, setPrefilledExpense] = useState(null);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const sharedToken = useMemo(() => {
+    const match = window.location.pathname.match(/^\/shared\/([^/]+)$/);
+    return match ? match[1] : null;
+  }, []);
+
+  const isSharedView = Boolean(sharedToken);
+  const [sharedTrip, setSharedTrip] = useState(null);
+  const [sharedItems, setSharedItems] = useState([]);
+  const [sharedLoading, setSharedLoading] = useState(Boolean(sharedToken));
+  const [sharedError, setSharedError] = useState("");
+
+  useEffect(() => {
+    if (!sharedToken) return;
+    let cancelled = false;
+
+    getSharedTrip(sharedToken)
+      .then(({ trip, items: loadedItems }) => {
+        if (!cancelled) {
+          setSharedTrip(trip);
+          setSharedItems(loadedItems);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setSharedError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setSharedLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sharedToken]);
+
+  async function handleShareTrip() {
+    if (!hasSavedTrip) {
+      alert("Please create a trip first.");
+      return;
+    }
+
+    try {
+      const { shareToken } = await shareTrip(activeTrip.id);
+      setTrips((prev) =>
+        prev.map((trip) =>
+          trip.id === activeTrip.id ? { ...trip, shareToken } : trip
+        )
+      );
+      const shareUrl = `${window.location.origin}/shared/${shareToken}`;
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 3000);
+      } else {
+        window.prompt("Copy this view-only share link:", shareUrl);
+      }
+    } catch (err) {
+      alert(`Unable to share this trip: ${err.message}`);
+    }
+  }
+
+  const itemTypeToCategory = {
+    Hotel: "LODGING",
+    Flight: "TRANSPORTATION",
+    Transportation: "TRANSPORTATION",
+    Food: "MEALS",
+    Activity: "ACTIVITIES",
+    Park: "ACTIVITIES",
+    Shopping: "SHOPPING",
+    "Saved Spot": "OTHER",
+  };
+
+  const expenseCategoryToItemType = {
+    LODGING: "Hotel",
+    TRANSPORTATION: "Transportation",
+    MEALS: "Food",
+    ACTIVITIES: "Activity",
+    SHOPPING: "Shopping",
+    OTHER: "Saved Spot",
+  };
+
+  function findItemExpense(item) {
+    return (
+      expenses.find(
+        (exp) =>
+          exp.description.trim().toLowerCase() === item.title.trim().toLowerCase() &&
+          exp.rawDate === item.rawDate
+      ) || null
+    );
+  }
+
+  function handleLogItemExpense(item, existingExpense = null) {
+    const matched = existingExpense || findItemExpense(item);
+    if (matched) {
+      setPrefilledExpense({ existingExpense: matched });
+    } else {
+      setPrefilledExpense({
+        itemId: item.id,
+        description: item.title,
+        category: itemTypeToCategory[item.type] || "OTHER",
+        rawDate: item.rawDate || activeTrip.startDate || "",
+      });
+    }
+    setActiveTab("budget");
+  }
+
+  const displayedItems = isSharedView ? sharedItems : items;
+
+  const sortedItems = useMemo(() => [...displayedItems].sort((a, b) => { // sort itenary items list by date, then time
     const dateA = a.rawDate ? new Date(`${a.rawDate}T${a.rawTime || "00:00"}`) : new Date(a.date);
     const dateB = b.rawDate ? new Date(`${b.rawDate}T${b.rawTime || "00:00"}`) : new Date(b.date);
 
     return dateA - dateB;
-  }), [items]);
+  }), [displayedItems]);
 
   const travelTimes = useTravelTimes(sortedItems);
 
@@ -147,6 +275,58 @@ function App() {
     }
   }
 
+  async function handleSaveExpense(expenseData, expenseId = null) {
+    if (!activeTrip.id) {
+      alert("Please create a trip first.");
+      return;
+    }
+
+    try {
+      if (expenseId) {
+        const saved = await updateExpense(activeTrip.id, expenseId, expenseData);
+        setExpenses((prev) => prev.map((exp) => (exp.id === saved.id ? saved : exp)));
+      } else {
+        const saved = await createExpense(activeTrip.id, expenseData);
+        setExpenses((prev) => [saved, ...prev]);
+
+        // Also create a matching itinerary item if one doesn't already exist
+        const alreadyInItinerary = items.some(
+          (item) =>
+            item.title.trim().toLowerCase() === expenseData.description.trim().toLowerCase() &&
+            item.rawDate === expenseData.rawDate
+        );
+
+        if (!alreadyInItinerary) {
+          const itemType = expenseCategoryToItemType[expenseData.category] || "Activity";
+          const newItem = await createItineraryItem(activeTrip.id, {
+            title: expenseData.description,
+            type: itemType,
+            location: "",
+            lat: null,
+            lng: null,
+            rawDate: expenseData.rawDate,
+            rawTime: "",
+            notes: "",
+          });
+          setItems((prev) => [...prev, newItem]);
+        }
+      }
+      setErrorMessage("");
+    } catch (err) {
+      alert(`Unable to save this expense: ${err.message}`);
+    }
+  }
+
+  async function handleDeleteExpense(expenseId) {
+    if (!window.confirm("Are you sure you want to delete this expense?")) return;
+
+    try {
+      await deleteExpense(activeTrip.id, expenseId);
+      setExpenses((prev) => prev.filter((exp) => exp.id !== expenseId));
+    } catch (err) {
+      alert(`Unable to delete this expense: ${err.message}`);
+    }
+  }
 
   function handleEditItem(item) {
     setEditingItem(item);
@@ -204,6 +384,7 @@ function App() {
       startLng: activeTrip.startLng ?? null,
       destLat: activeTrip.destLat ?? null,
       destLng: activeTrip.destLng ?? null,
+      budget: activeTrip.budget ?? "",
     });
     setIsTripModalOpen(true);
   }
@@ -264,14 +445,101 @@ function App() {
     setShowItemModal(true);
   }
 
+  if (isSharedView) {
+    return (
+      <div className="app">
+        <header className="navbar">
+          <div className="logo">Trippin</div>
+          <nav>
+            <span style={{ color: "#4f46e5", fontWeight: 600 }}>
+              View-Only Shared Itinerary
+            </span>
+          </nav>
+        </header>
+
+        <main className="container">
+          {sharedLoading && (
+            <p style={{ color: "#64748b" }}>Loading shared itinerary...</p>
+          )}
+          {sharedError && <p style={{ color: "#ef4444" }}>{sharedError}</p>}
+
+          {sharedTrip && (
+            <>
+              <section className="trip-header">
+                <div>
+                  <p className="eyebrow">SHARED TRIP · VIEW ONLY</p>
+                  <h1>{sharedTrip.title}</h1>
+                  <p className="route">
+                    {`${sharedTrip.startLocation} → ${sharedTrip.destination}`}
+                  </p>
+                  <p className="dates">
+                    {sharedTrip.startDate
+                      ? `${sharedTrip.startDate} – ${sharedTrip.endDate}`
+                      : ""}
+                  </p>
+                </div>
+              </section>
+
+              <section className="itinerary-section">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">TRIP SCHEDULE</p>
+                    <h2>Itinerary</h2>
+                  </div>
+                </div>
+
+                <MapContainer
+                  activeTrip={sharedTrip}
+                  itineraryItems={sortedItems}
+                />
+
+                <div className="timeline">
+                  {Object.keys(groupedItems).length === 0 ? (
+                    <p style={{ color: "#64748b" }}>
+                      No itinerary items added yet for this trip.
+                    </p>
+                  ) : (
+                    Object.entries(groupedItems).map(([date, dayItems]) => (
+                      <div className="day" key={date}>
+                        <h3>{date}</h3>
+                        <div className="day-items">
+                          {dayItems.map((item) => (
+                            <ItineraryItem
+                              key={item.id}
+                              item={item}
+                              travel={travelTimes[item.id]}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="navbar">
         <div className="logo">Trippin</div>
         <nav>
-          <span className="active">My Trips</span>
-          <span>Explore</span>
-          <span>Budget</span>
+          <span
+            className={activeTab === "trips" ? "active" : ""}
+            onClick={() => setActiveTab("trips")}
+          >
+            My Trips
+          </span>
+          <span
+            className={activeTab === "budget" ? "active" : ""}
+            onClick={() => setActiveTab("budget")}
+          >
+            Budget
+          </span>
         </nav>
       </header>
 
@@ -306,91 +574,153 @@ function App() {
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button
-              className="add-button"
-              onClick={handleOpenTripModal}
-            >
-              + Create Trip
-            </button>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: "12px",
+            }}
+          >
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                className="add-button"
+                onClick={handleOpenTripModal}
+              >
+                + Create Trip
+              </button>
 
-            {hasSavedTrip && (
-              <>
+              {hasSavedTrip && (
+                <>
+                  <button
+                    className="save-button"
+                    onClick={handleEditTrip}
+                  >
+                    ✏️ Edit Trip
+                  </button>
+
+                  <button
+                    className="save-button"
+                    onClick={handleDeleteTrip}
+                  >
+                    🗑️ Delete Trip
+                  </button>
+                </>
+              )}
+
+              <button
+                className="save-button"
+                onClick={handleToggleSaveTrip}
+              >
+                {activeTrip.isBookmarked ? "♥ Saved" : "♡ Save Trip"}
+              </button>
+
+              {hasSavedTrip && (
                 <button
                   className="save-button"
-                  onClick={handleEditTrip}
+                  onClick={handleShareTrip}
                 >
-                  ✏️ Edit Trip
+                  {shareCopied ? "✓ Link Copied!" : "🔗 Share Trip"}
                 </button>
-
-                <button
-                  className="save-button"
-                  onClick={handleDeleteTrip}
-                >
-                  🗑️ Delete Trip
-                </button>
-              </>
-            )}
-
-            <button
-              className="save-button"
-              onClick={handleToggleSaveTrip}
-            >
-              {activeTrip.isBookmarked ? "♥ Saved" : "♡ Save Trip"}
-            </button>
-          </div>
-        </section>
-
-        <section className="itinerary-section">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">TRIP SCHEDULE</p>
-              <h2>My Itinerary</h2>
+              )}
             </div>
 
-            <button
-              className="add-button"
-              onClick={() => {
-                setEditingItem(null);
-                setIsTripModalOpen(false);
-                setShowItemModal(true);
-              }}
-            >
-              + Add Item
-            </button>
-          </div>
-
-          {/*render map, spot search and bookmark, spot pins, route lines*/}
-          <MapContainer
-            onAddBookmark={handleAddBookmark}
-            activeTrip={activeTrip}
-            itineraryItems={sortedItems}
-          />
-
-          <div className="timeline">
-            {Object.keys(groupedItems).length === 0 ? (
-              <p style={{ color: "#64748b" }}>No itinerary items added yet for this trip.</p>
-            ) : (
-              Object.entries(groupedItems).map(([date, dayItems]) => (
-                <div className="day" key={date}>
-                  <h3>{date}</h3>
-
-                  <div className="day-items">
-                    {dayItems.map((item) => (
-                      <ItineraryItem
-                        key={item.id}
-                        item={item}
-                        travel={travelTimes[item.id]}
-                        onEdit={handleEditItem}
-                        onDelete={handleDeleteItem}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))
+            {hasSavedTrip && (
+              <div
+                onClick={() => setActiveTab("budget")}
+                title="View Budget & Expenses"
+                style={{
+                  cursor: "pointer",
+                  fontSize: "15px",
+                  fontWeight: "600",
+                  background: "rgba(255, 255, 255, 0.16)",
+                  padding: "6px 14px",
+                  borderRadius: "10px",
+                }}
+              >
+                💰 Spent:{" "}
+                {new Intl.NumberFormat("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                }).format(
+                  expenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0)
+                )}
+                {activeTrip.budget !== null && activeTrip.budget !== undefined
+                  ? ` / ${new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                    }).format(Number(activeTrip.budget))}`
+                  : ""}
+              </div>
             )}
           </div>
         </section>
+
+        {activeTab === "trips" ? (
+          <section className="itinerary-section">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">TRIP SCHEDULE</p>
+                <h2>My Itinerary</h2>
+              </div>
+
+              <button
+                className="add-button"
+                onClick={() => {
+                  setEditingItem(null);
+                  setIsTripModalOpen(false);
+                  setShowItemModal(true);
+                }}
+              >
+                + Add Item
+              </button>
+            </div>
+
+            {/*render map, spot search and bookmark, spot pins, route lines*/}
+            <MapContainer
+              onAddBookmark={handleAddBookmark}
+              activeTrip={activeTrip}
+              itineraryItems={sortedItems}
+            />
+
+            <div className="timeline">
+              {Object.keys(groupedItems).length === 0 ? (
+                <p style={{ color: "#64748b" }}>No itinerary items added yet for this trip.</p>
+              ) : (
+                Object.entries(groupedItems).map(([date, dayItems]) => (
+                  <div className="day" key={date}>
+                    <h3>{date}</h3>
+
+                    <div className="day-items">
+                      {dayItems.map((item) => (
+                        <ItineraryItem
+                          key={item.id}
+                          item={item}
+                          travel={travelTimes[item.id]}
+                          itemExpense={findItemExpense(item)}
+                          onEdit={handleEditItem}
+                          onDelete={handleDeleteItem}
+                          onLogExpense={handleLogItemExpense}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        ) : (
+          <ExpenseTracker
+            activeTrip={activeTrip}
+            expenses={expenses}
+            itineraryItems={sortedItems}
+            prefilledExpense={prefilledExpense}
+            onClearPrefilledExpense={() => setPrefilledExpense(null)}
+            onSaveExpense={handleSaveExpense}
+            onDeleteExpense={handleDeleteExpense}
+            onEditTripBudget={handleEditTrip}
+          />
+        )}
       </main>
 
       <ItineraryForm // add itinerary form

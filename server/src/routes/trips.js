@@ -1,5 +1,6 @@
 // routes for trips and their itinerary items
 // every response uses plain JSON: dates are "YYYY-MM-DD" strings and time is "HH:MM"
+const crypto = require('crypto');
 const express = require('express');
 const prisma = require('../db');
 
@@ -18,6 +19,16 @@ function serializeTrip(trip) {
     startDate: toDateString(trip.startDate),
     endDate: toDateString(trip.endDate),
     budget: trip.budget === null ? null : Number(trip.budget),
+  };
+}
+
+const VALID_CATEGORIES = ['LODGING', 'TRANSPORTATION', 'MEALS', 'ACTIVITIES', 'SHOPPING', 'OTHER'];
+
+function serializeExpense(expense) {
+  return {
+    ...expense,
+    amount: Number(expense.amount),
+    date: toDateString(expense.date),
   };
 }
 
@@ -61,19 +72,25 @@ function readTrip(body, partial) {
 
 function readItem(body, partial) {
   const data = {};
-  for (const key of ['title', 'location']) {
-    if (body[key] !== undefined || !partial) {
-      if (!isNonEmpty(body[key])) return { error: `${key} is required` };
-      data[key] = body[key].trim();
-    }
+  if (body.title !== undefined || !partial) {
+    if (!isNonEmpty(body.title)) return { error: 'title is required' };
+    data.title = body.title.trim();
+  }
+  if (body.location !== undefined || !partial) {
+    data.location = typeof body.location === 'string' ? body.location.trim() : '';
   }
   if (body.date !== undefined || !partial) {
     if (!isDateString(body.date)) return { error: 'date must be YYYY-MM-DD' };
     data.date = new Date(body.date);
   }
   if (body.time !== undefined || !partial) {
-    if (!isTimeString(body.time)) return { error: 'time must be HH:MM' };
-    data.time = body.time;
+    if (body.time === '' || body.time === null) {
+      data.time = '';
+    } else if (!isTimeString(body.time)) {
+      return { error: 'time must be HH:MM' };
+    } else {
+      data.time = body.time;
+    }
   }
   if (body.type !== undefined) data.type = String(body.type);
   if (body.notes !== undefined) data.notes = body.notes || null;
@@ -83,6 +100,34 @@ function readItem(body, partial) {
       if (n !== null && !Number.isFinite(n)) return { error: `${key} must be a number` };
       data[key] = n;
     }
+  }
+  return { data };
+}
+
+function readExpense(body, partial) {
+  const data = {};
+  if (body.description !== undefined || !partial) {
+    if (!isNonEmpty(body.description)) return { error: 'description is required' };
+    data.description = body.description.trim();
+  }
+  if (body.amount !== undefined || !partial) {
+    const n = Number(body.amount);
+    if (!Number.isFinite(n) || n <= 0) return { error: 'amount must be a positive number' };
+    data.amount = n;
+  }
+  if (body.category !== undefined) {
+    const cat = String(body.category).toUpperCase();
+    if (!VALID_CATEGORIES.includes(cat)) {
+      return { error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` };
+    }
+    data.category = cat;
+  }
+  if (body.date !== undefined || !partial) {
+    if (!isDateString(body.date)) return { error: 'date must be YYYY-MM-DD' };
+    data.date = new Date(body.date);
+  }
+  if (body.receiptUrl !== undefined) {
+    data.receiptUrl = body.receiptUrl || null;
   }
   return { data };
 }
@@ -104,6 +149,42 @@ router.post('/', async (req, res) => {
   if (error) return res.status(400).json({ error });
   const trip = await prisma.trip.create({ data });
   res.status(201).json(serializeTrip(trip));
+});
+
+// public read-only view for a shared itinerary link (must stay above GET /:id)
+router.get('/shared/:token', async (req, res) => {
+  const trip = await prisma.trip.findUnique({
+    where: { shareToken: req.params.token },
+    include: {
+      itineraryItems: {
+        orderBy: [{ date: 'asc' }, { time: 'asc' }],
+      },
+    },
+  });
+  if (!trip) return res.status(404).json({ error: 'Shared itinerary not found' });
+
+  res.json({
+    trip: serializeTrip(trip),
+    items: trip.itineraryItems.map(serializeItem),
+  });
+});
+
+// generates (or returns existing) unique share token for a trip
+router.post('/:id/share', async (req, res) => {
+  const existing = await findTrip(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Trip not found' });
+
+  if (existing.shareToken) {
+    return res.json({ shareToken: existing.shareToken });
+  }
+
+  const shareToken = crypto.randomBytes(16).toString('hex');
+  const updated = await prisma.trip.update({
+    where: { id: existing.id },
+    data: { shareToken },
+  });
+
+  res.json({ shareToken: updated.shareToken });
 });
 
 router.get('/:id', async (req, res) => {
@@ -171,6 +252,45 @@ router.delete('/:id/items/:itemId', async (req, res) => {
   });
   if (!existing) return res.status(404).json({ error: 'Item not found' });
   await prisma.itineraryItem.delete({ where: { id: existing.id } });
+  res.status(204).end();
+});
+
+// ---------- expenses ----------
+
+router.get('/:id/expenses', async (req, res) => {
+  if (!(await findTrip(req.params.id))) return res.status(404).json({ error: 'Trip not found' });
+  const expenses = await prisma.expense.findMany({
+    where: { tripId: req.params.id },
+    orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+  });
+  res.json(expenses.map(serializeExpense));
+});
+
+router.post('/:id/expenses', async (req, res) => {
+  if (!(await findTrip(req.params.id))) return res.status(404).json({ error: 'Trip not found' });
+  const { data, error } = readExpense(req.body || {}, false);
+  if (error) return res.status(400).json({ error });
+  const expense = await prisma.expense.create({ data: { ...data, tripId: req.params.id } });
+  res.status(201).json(serializeExpense(expense));
+});
+
+router.put('/:id/expenses/:expenseId', async (req, res) => {
+  const existing = await prisma.expense.findFirst({
+    where: { id: req.params.expenseId, tripId: req.params.id },
+  });
+  if (!existing) return res.status(404).json({ error: 'Expense not found' });
+  const { data, error } = readExpense(req.body || {}, true);
+  if (error) return res.status(400).json({ error });
+  const expense = await prisma.expense.update({ where: { id: existing.id }, data });
+  res.json(serializeExpense(expense));
+});
+
+router.delete('/:id/expenses/:expenseId', async (req, res) => {
+  const existing = await prisma.expense.findFirst({
+    where: { id: req.params.expenseId, tripId: req.params.id },
+  });
+  if (!existing) return res.status(404).json({ error: 'Expense not found' });
+  await prisma.expense.delete({ where: { id: existing.id } });
   res.status(204).end();
 });
 

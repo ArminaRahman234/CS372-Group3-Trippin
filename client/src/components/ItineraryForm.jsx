@@ -3,7 +3,14 @@ import { Autocomplete } from "@react-google-maps/api";
 import { typeIcons } from "../services/api";
 
 
-export function ItineraryItem({ item, travel, onEdit, onDelete }) { // display
+export function ItineraryItem({ item, travel, itemExpense, onEdit, onDelete, onLogExpense }) { // display
+  const formattedExpense = itemExpense
+    ? new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+      }).format(Number(itemExpense.amount) || 0)
+    : null;
+
   return (
     <article className="itinerary-card">
       <div className="item-icon">{item.icon}</div>
@@ -11,43 +18,81 @@ export function ItineraryItem({ item, travel, onEdit, onDelete }) { // display
       <div className="item-info">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span className="item-type">{item.type}</span>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button
-              onClick={() => onEdit(item)}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: "#6366f1",
-                cursor: "pointer",
-                fontWeight: "600",
-                fontSize: "12px",
-              }}
-            >
-              Edit
-            </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            {formattedExpense && (
+              <span
+                style={{
+                  fontSize: "14px",
+                  fontWeight: "700",
+                  color: "#15803d",
+                  background: "#dcfce7",
+                  padding: "2px 8px",
+                  borderRadius: "6px",
+                }}
+              >
+                {formattedExpense}
+              </span>
+            )}
 
-            <button
-              onClick={() => onDelete(item.id)}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: "#ef4444",
-                cursor: "pointer",
-                fontWeight: "600",
-                fontSize: "12px",
-              }}
-            >
-              Delete
-            </button>
+            {onLogExpense && (
+              <button
+                type="button"
+                onClick={() => onLogExpense(item, itemExpense)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#16a34a",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "12px",
+                }}
+              >
+                {itemExpense ? "Edit Expense" : "+ Expense"}
+              </button>
+            )}
+
+            {onEdit && (
+              <button
+                onClick={() => onEdit(item)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#6366f1",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "12px",
+                }}
+              >
+                Edit
+              </button>
+            )}
+
+            {onDelete && (
+              <button
+                onClick={() => onDelete(item.id)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#ef4444",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "12px",
+                }}
+              >
+                Delete
+              </button>
+            )}
           </div>
         </div>
 
         <h4>{item.title}</h4>
 
-        <div className="item-details">
-          <span>🕐 {item.time}</span>
-          <span>📍 {item.location}</span>
-        </div>
+        {(item.time || item.location) && (
+          <div className="item-details">
+            {item.time && <span>🕐 {item.time}</span>}
+            {item.location && <span>📍 {item.location}</span>}
+          </div>
+        )}
 
         {travel &&(
           <div className="travel-badge">
