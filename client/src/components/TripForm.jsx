@@ -85,6 +85,14 @@ function TripForm({
       if (!confirmPastTrip) return;
     }
 
+    if (tripDraft.budget !== "" && tripDraft.budget !== null && tripDraft.budget !== undefined) {
+      const parsedBudget = Number(tripDraft.budget);
+      if (!Number.isFinite(parsedBudget) || parsedBudget < 0) {
+        alert("Budget must be a valid non-negative number.");
+        return;
+      }
+    }
+
     onSaveTrip(tripDraft);
     onClose();
   }
@@ -181,6 +189,19 @@ function TripForm({
                 name="endDate"
                 value={tripDraft.endDate}
                 onChange={handleChange}
+              />
+            </label>
+
+            <label>
+              Trip Budget ($)
+              <input
+                type="number"
+                name="budget"
+                min="0"
+                step="0.01"
+                value={tripDraft.budget ?? ""}
+                onChange={handleChange}
+                placeholder="Example: 1500.00 (optional)"
               />
             </label>
           </div>
