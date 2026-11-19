@@ -11,6 +11,8 @@ import {
   addTrip,
   updateTrip,
   deleteTrip,
+  shareTrip,
+  getSharedTrip,
   getItineraryItems,
   createItineraryItem,
   updateItineraryItem,
@@ -112,6 +114,67 @@ function App() {
   const [expenses, setExpenses] = useState([]);
   const [activeTab, setActiveTab] = useState("trips"); // "trips" | "budget"
   const [prefilledExpense, setPrefilledExpense] = useState(null);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const sharedToken = useMemo(() => {
+    const match = window.location.pathname.match(/^\/shared\/([^/]+)$/);
+    return match ? match[1] : null;
+  }, []);
+
+  const isSharedView = Boolean(sharedToken);
+  const [sharedTrip, setSharedTrip] = useState(null);
+  const [sharedItems, setSharedItems] = useState([]);
+  const [sharedLoading, setSharedLoading] = useState(Boolean(sharedToken));
+  const [sharedError, setSharedError] = useState("");
+
+  useEffect(() => {
+    if (!sharedToken) return;
+    let cancelled = false;
+
+    getSharedTrip(sharedToken)
+      .then(({ trip, items: loadedItems }) => {
+        if (!cancelled) {
+          setSharedTrip(trip);
+          setSharedItems(loadedItems);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setSharedError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setSharedLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sharedToken]);
+
+  async function handleShareTrip() {
+    if (!hasSavedTrip) {
+      alert("Please create a trip first.");
+      return;
+    }
+
+    try {
+      const { shareToken } = await shareTrip(activeTrip.id);
+      setTrips((prev) =>
+        prev.map((trip) =>
+          trip.id === activeTrip.id ? { ...trip, shareToken } : trip
+        )
+      );
+      const shareUrl = `${window.location.origin}/shared/${shareToken}`;
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 3000);
+      } else {
+        window.prompt("Copy this view-only share link:", shareUrl);
+      }
+    } catch (err) {
+      alert(`Unable to share this trip: ${err.message}`);
+    }
+  }
 
   const itemTypeToCategory = {
     Hotel: "LODGING",
@@ -158,12 +221,14 @@ function App() {
     setActiveTab("budget");
   }
 
-  const sortedItems = useMemo(() => [...items].sort((a, b) => { // sort itenary items list by date, then time
+  const displayedItems = isSharedView ? sharedItems : items;
+
+  const sortedItems = useMemo(() => [...displayedItems].sort((a, b) => { // sort itenary items list by date, then time
     const dateA = a.rawDate ? new Date(`${a.rawDate}T${a.rawTime || "00:00"}`) : new Date(a.date);
     const dateB = b.rawDate ? new Date(`${b.rawDate}T${b.rawTime || "00:00"}`) : new Date(b.date);
 
     return dateA - dateB;
-  }), [items]);
+  }), [displayedItems]);
 
   const travelTimes = useTravelTimes(sortedItems);
 
@@ -380,6 +445,84 @@ function App() {
     setShowItemModal(true);
   }
 
+  if (isSharedView) {
+    return (
+      <div className="app">
+        <header className="navbar">
+          <div className="logo">Trippin</div>
+          <nav>
+            <span style={{ color: "#4f46e5", fontWeight: 600 }}>
+              View-Only Shared Itinerary
+            </span>
+          </nav>
+        </header>
+
+        <main className="container">
+          {sharedLoading && (
+            <p style={{ color: "#64748b" }}>Loading shared itinerary...</p>
+          )}
+          {sharedError && <p style={{ color: "#ef4444" }}>{sharedError}</p>}
+
+          {sharedTrip && (
+            <>
+              <section className="trip-header">
+                <div>
+                  <p className="eyebrow">SHARED TRIP · VIEW ONLY</p>
+                  <h1>{sharedTrip.title}</h1>
+                  <p className="route">
+                    {`${sharedTrip.startLocation} → ${sharedTrip.destination}`}
+                  </p>
+                  <p className="dates">
+                    {sharedTrip.startDate
+                      ? `${sharedTrip.startDate} – ${sharedTrip.endDate}`
+                      : ""}
+                  </p>
+                </div>
+              </section>
+
+              <section className="itinerary-section">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">TRIP SCHEDULE</p>
+                    <h2>Itinerary</h2>
+                  </div>
+                </div>
+
+                <MapContainer
+                  activeTrip={sharedTrip}
+                  itineraryItems={sortedItems}
+                />
+
+                <div className="timeline">
+                  {Object.keys(groupedItems).length === 0 ? (
+                    <p style={{ color: "#64748b" }}>
+                      No itinerary items added yet for this trip.
+                    </p>
+                  ) : (
+                    Object.entries(groupedItems).map(([date, dayItems]) => (
+                      <div className="day" key={date}>
+                        <h3>{date}</h3>
+                        <div className="day-items">
+                          {dayItems.map((item) => (
+                            <ItineraryItem
+                              key={item.id}
+                              item={item}
+                              travel={travelTimes[item.id]}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="navbar">
@@ -471,6 +614,15 @@ function App() {
               >
                 {activeTrip.isBookmarked ? "♥ Saved" : "♡ Save Trip"}
               </button>
+
+              {hasSavedTrip && (
+                <button
+                  className="save-button"
+                  onClick={handleShareTrip}
+                >
+                  {shareCopied ? "✓ Link Copied!" : "🔗 Share Trip"}
+                </button>
+              )}
             </div>
 
             {hasSavedTrip && (

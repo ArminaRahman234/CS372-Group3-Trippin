@@ -51,33 +51,37 @@ export function ItineraryItem({ item, travel, itemExpense, onEdit, onDelete, onL
               </button>
             )}
 
-            <button
-              onClick={() => onEdit(item)}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: "#6366f1",
-                cursor: "pointer",
-                fontWeight: "600",
-                fontSize: "12px",
-              }}
-            >
-              Edit
-            </button>
+            {onEdit && (
+              <button
+                onClick={() => onEdit(item)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#6366f1",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "12px",
+                }}
+              >
+                Edit
+              </button>
+            )}
 
-            <button
-              onClick={() => onDelete(item.id)}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: "#ef4444",
-                cursor: "pointer",
-                fontWeight: "600",
-                fontSize: "12px",
-              }}
-            >
-              Delete
-            </button>
+            {onDelete && (
+              <button
+                onClick={() => onDelete(item.id)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#ef4444",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "12px",
+                }}
+              >
+                Delete
+              </button>
+            )}
           </div>
         </div>
 

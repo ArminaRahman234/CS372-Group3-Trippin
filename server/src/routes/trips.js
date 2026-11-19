@@ -1,5 +1,6 @@
 // routes for trips and their itinerary items
 // every response uses plain JSON: dates are "YYYY-MM-DD" strings and time is "HH:MM"
+const crypto = require('crypto');
 const express = require('express');
 const prisma = require('../db');
 
@@ -148,6 +149,42 @@ router.post('/', async (req, res) => {
   if (error) return res.status(400).json({ error });
   const trip = await prisma.trip.create({ data });
   res.status(201).json(serializeTrip(trip));
+});
+
+// public read-only view for a shared itinerary link (must stay above GET /:id)
+router.get('/shared/:token', async (req, res) => {
+  const trip = await prisma.trip.findUnique({
+    where: { shareToken: req.params.token },
+    include: {
+      itineraryItems: {
+        orderBy: [{ date: 'asc' }, { time: 'asc' }],
+      },
+    },
+  });
+  if (!trip) return res.status(404).json({ error: 'Shared itinerary not found' });
+
+  res.json({
+    trip: serializeTrip(trip),
+    items: trip.itineraryItems.map(serializeItem),
+  });
+});
+
+// generates (or returns existing) unique share token for a trip
+router.post('/:id/share', async (req, res) => {
+  const existing = await findTrip(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Trip not found' });
+
+  if (existing.shareToken) {
+    return res.json({ shareToken: existing.shareToken });
+  }
+
+  const shareToken = crypto.randomBytes(16).toString('hex');
+  const updated = await prisma.trip.update({
+    where: { id: existing.id },
+    data: { shareToken },
+  });
+
+  res.json({ shareToken: updated.shareToken });
 });
 
 router.get('/:id', async (req, res) => {

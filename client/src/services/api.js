@@ -136,6 +136,18 @@ export function deleteTrip(tripId) {
   return request(`/trips/${tripId}`, { method: "DELETE" });
 }
 
+export function shareTrip(tripId) {
+  return request(`/trips/${tripId}/share`, { method: "POST" });
+}
+
+export async function getSharedTrip(token) {
+  const data = await request(`/trips/shared/${token}`);
+  return {
+    trip: data.trip,
+    items: (data.items || []).map(toUiItem),
+  };
+}
+
 // --- ITINERARY FUNCTIONS ---
 export async function getItineraryItems(tripId) {
   const items = await request(`/trips/${tripId}/items`);
