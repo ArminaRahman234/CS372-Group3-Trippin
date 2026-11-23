@@ -4,6 +4,7 @@ import TripForm from "./components/TripForm";
 import { ItineraryItem, ItineraryForm } from "./components/ItineraryForm";
 import MapContainer from "./components/MapContainer";
 import { useTravelTimes } from "./hooks/useTravelTimes";
+import SavedTrips from "./components/SavedTrips";
 
 import {
   getTrips,
@@ -15,6 +16,13 @@ import {
   updateItineraryItem,
   deleteItineraryItem,
 } from "./services/api";
+
+import {
+  getStoredActiveTripId,
+  storeActiveTripId,
+  getStoredSavedTripsFilter,
+  storeSavedTripsFilter,
+} from "./services/preferences";
 
 // shown only while there are no saved trips
 const placeholderTrip = {
@@ -36,10 +44,20 @@ const emptyTrip = {
 
 function App() {
   const [trips, setTrips] = useState([]);
-  const [activeTripId, setActiveTripId] = useState(null);
+  const [activeTripId, setActiveTripId] = useState(getStoredActiveTripId);
   const [items, setItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [view, setView] = useState("trips");
+  const [savedFilter, setSavedFilter] = useState(getStoredSavedTripsFilter);
+
+  useEffect(() => {
+    storeActiveTripId(activeTripId);
+  }, [activeTripId]);
+
+  useEffect(() => {
+    storeSavedTripsFilter(savedFilter);
+  }, [savedFilter]);
 
   const hasSavedTrip = trips.length > 0;
   // default to the last trip when nothing is selected (or the selected one was deleted)
@@ -163,6 +181,7 @@ function App() {
         const saved = await addTrip(newTripData);
         setTrips((prev) => [...prev, saved]);
         setActiveTripId(saved.id); // jump to the trip that was just created
+        setView("trips");
       }
     } catch (err) {
       alert(`Unable to save this trip: ${err.message}`);
@@ -232,19 +251,26 @@ function App() {
     setIsTripModalOpen(false);
   }
 
-  // Bookmark (or un-bookmark) the current trip in the database.
-  async function handleToggleSaveTrip() {
-    if (!hasSavedTrip) {
+  // Bookmark or un-bookmark any trip (header button and Saved Trips cards)
+  async function handleToggleBookmark(trip) {
+    if (!trip?.id) {
       alert("Please create a trip first.");
       return;
     }
 
     try {
-      const saved = await updateTrip(activeTrip.id, { isBookmarked: !activeTrip.isBookmarked });
-      setTrips((prev) => prev.map((trip) => (trip.id === saved.id ? saved : trip)));
+      const saved = await updateTrip(trip.id, { isBookmarked: !trip.isBookmarked });
+      setTrips((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
     } catch (err) {
-      alert(`Unable to save the trip: ${err.message}`);
+      alert(`Unable to update the bookmark: ${err.message}`);
     }
+  }
+
+  // Open a trip from Saved Trips and go back to My Trips
+  function handleOpenTrip(tripId) {
+    setActiveTripId(tripId);
+    setView("trips");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function handleAddBookmark(bookmarkData) { // open form with bookmarked spot pre-filled
@@ -269,7 +295,20 @@ function App() {
       <header className="navbar">
         <div className="logo">Trippin</div>
         <nav>
-          <span className="active">My Trips</span>
+          <button
+            type="button"
+            className={view === "trips" ? "active" : ""}
+            onClick={() => setView("trips")}
+          >
+            My Trips
+          </button>
+          <button
+            type="button"
+            className={view === "saved" ? "active" : ""}
+            onClick={() => setView("saved")}
+          >
+            Saved Trips
+          </button>
           <span>Explore</span>
           <span>Budget</span>
         </nav>
@@ -278,6 +317,19 @@ function App() {
       <main className="container">
         {isLoading && <p style={{ color: "#64748b" }}>Loading your trips...</p>}
         {errorMessage && <p style={{ color: "#ef4444" }}>{errorMessage}</p>}
+        {view === "saved" ? (
+          <SavedTrips
+            trips={trips}
+            activeTripId={activeTrip.id}
+            filter={savedFilter}
+            onFilterChange={setSavedFilter}
+            onOpenTrip={handleOpenTrip}
+            onToggleBookmark={handleToggleBookmark}
+            onCreateTrip={handleOpenTripModal}
+            isLoading={isLoading}
+          />
+        ) : (
+        <>
 
         <section className="trip-header">
           <div>
@@ -334,7 +386,7 @@ function App() {
 
             <button
               className="save-button"
-              onClick={handleToggleSaveTrip}
+              onClick={() => handleToggleBookmark(hasSavedTrip ? activeTrip : null)}
             >
               {activeTrip.isBookmarked ? "♥ Saved" : "♡ Save Trip"}
             </button>
@@ -391,6 +443,8 @@ function App() {
             )}
           </div>
         </section>
+        </>
+        )}
       </main>
 
       <ItineraryForm // add itinerary form
