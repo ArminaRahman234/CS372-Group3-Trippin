@@ -31,8 +31,21 @@ app.get('/api/health/db', async (req, res) => {
 // trips and their itinerary items
 app.use('/api/trips', tripRoutes);
 
+// any other /api address gets a json 404 instead of express's html page
+app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
+
+// messages for the mistakes express catches while reading a request
+const REQUEST_ERRORS = {
+  'entity.parse.failed': 'Request body is not valid JSON',
+  'entity.too.large': 'Request body is too large',
+};
+
 // catches anything thrown inside a route (bad ids, database errors) so the client gets json back
 app.use((err, req, res, next) => {
+  // 4xx means the request was the problem, so keep that status
+  if (err.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ error: REQUEST_ERRORS[err.type] || 'Bad request' });
+  }
   console.error(err);
   res.status(500).json({ error: 'Something went wrong on the server' });
 });
