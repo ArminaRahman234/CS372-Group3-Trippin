@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Autocomplete } from "@react-google-maps/api";
 
 function TripForm({
@@ -12,6 +12,9 @@ function TripForm({
 
   const startAutoRef = useRef(null);
   const destAutoRef = useRef(null);
+
+  const savingRef = useRef(false); // blocks a second submit before the re-render
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!isOpen) return null;
 
@@ -53,8 +56,9 @@ function TripForm({
     }
   };
 
-  function handleSubmit(event) { // save the trip data
+  async function handleSubmit(event) { // save the trip data
     event.preventDefault();
+    if (savingRef.current) return;
 
     if ( // check for required input
       !tripDraft.title ||
@@ -85,15 +89,22 @@ function TripForm({
       if (!confirmPastTrip) return;
     }
 
-    onSaveTrip(tripDraft);
-    onClose();
+    savingRef.current = true;
+    setIsSaving(true);
+    try {
+      // onSaveTrip resolves to false when the save failed
+      if ((await onSaveTrip(tripDraft)) !== false) onClose();
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
+    }
   }
 
   return (
     <div
       className="modal-overlay"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && !isSaving) onClose();
       }}
     >
       <div className="modal"> {/*Style the form*/}
@@ -108,7 +119,7 @@ function TripForm({
             </h2>
           </div>
 
-          <button className="close-button" onClick={onClose}>
+          <button className="close-button" onClick={onClose} disabled={isSaving}>
             ✕
           </button>
         </div>
@@ -190,12 +201,13 @@ function TripForm({
               type="button"
               className="cancel-button"
               onClick={onClose}
+              disabled={isSaving}
             >
               Cancel
             </button>
-            <button type="submit" className="submit-button">
-  {isEditing ? "Save Changes" : "Save Trip"}
-</button>
+            <button type="submit" className="submit-button" disabled={isSaving}>
+              {isSaving ? "Saving..." : isEditing ? "Save Changes" : "Save Trip"}
+            </button>
           </div>
         </form>
       </div>

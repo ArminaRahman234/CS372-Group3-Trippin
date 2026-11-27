@@ -75,6 +75,9 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
 
   const autocompleteRef = useRef(null);
 
+  const savingRef = useRef(false); // blocks a second submit before the re-render
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => { // edit itenary items
     if (editingItem) {
       setForm({
@@ -130,8 +133,9 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
     }));
   }
 
-  function handleSubmit(event) { // save the data
+  async function handleSubmit(event) { // save the data
     event.preventDefault();
+    if (savingRef.current) return;
 
     if (!form.title || !form.location || !form.date || !form.time) { // check for required input
       alert("Please complete the required fields.");
@@ -186,8 +190,15 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
       notes: form.notes,
     };
 
-    onSave(savedData);
-    onClose();
+    savingRef.current = true;
+    setIsSaving(true);
+    try {
+      // onSave resolves to false when the save failed
+      if ((await onSave(savedData)) !== false) onClose();
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -195,7 +206,7 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
       className="modal-overlay"
 
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget && !isSaving) onClose();
       }}
     >
       <div className="modal"> {/* style the form */}
@@ -205,7 +216,7 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
             <h2>{editingItem?.id ? "Edit Itinerary Item" : "Add Itinerary Item"}</h2>
           </div>
 
-          <button className="close-button" onClick={onClose}>
+          <button className="close-button" onClick={onClose} disabled={isSaving}>
             ×
           </button>
         </div>
@@ -283,12 +294,12 @@ export function ItineraryForm({ isOpen, onClose, onSave, editingItem, activeTrip
           </label>
 
           <div className="modal-actions">
-            <button type="button" className="cancel-button" onClick={onClose}>
+            <button type="button" className="cancel-button" onClick={onClose} disabled={isSaving}>
               Cancel
             </button>
-            
-            <button type="submit" className="submit-button">
-              {editingItem?.id ? "Update Item" : "Add to Itinerary"}
+
+            <button type="submit" className="submit-button" disabled={isSaving}>
+              {isSaving ? "Saving..." : editingItem?.id ? "Update Item" : "Add to Itinerary"}
             </button>
           </div>
         </form>
