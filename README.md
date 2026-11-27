@@ -202,20 +202,26 @@ A `.env.example` file can be included in the repository to show which environmen
 
 ## 🧪 Testing
 
-The project will use **Jest** and **Supertest** for testing.
+The back-end uses **Jest** and **Supertest** for testing.
 
-Planned testing includes:
+Covered so far:
 
-* API endpoint testing
-* Trip creation and retrieval
-* Itinerary CRUD operations
-* Budget and expense operations
-* Error handling
-* Database interactions
+* Trip CRUD endpoints
+* Itinerary item CRUD endpoints
+* Input validation and error handling
+* Health checks and database interactions
 
-```bash
-npm test
-```
+Still to come: budget and expense endpoint tests.
+
+Run these inside `server/`:
+
+| Command | What it does |
+| --- | --- |
+| `npm test` | Runs every test |
+| `npm run test:unit` | Validation and error handling tests, no database needed |
+| `npm run test:integration` | Tests that read and write a real PostgreSQL database |
+
+The integration tests **delete data**, so they use their own database. By default it is your `DATABASE_URL` database name with `_test` added (for example `trippin_test`), and it is created automatically on the first run. To use a different one, set `TEST_DATABASE_URL` in `server/.env` (the name must end in `_test`).
 
 ---
 
