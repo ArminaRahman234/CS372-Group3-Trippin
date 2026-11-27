@@ -35,6 +35,13 @@ describe('POST /api/trips validation', () => {
     [{ budget: 'lots' }, 'budget must be a number'],
     [{ startLat: 'north' }, 'startLat must be a number'],
     [{ destLng: 'west' }, 'destLng must be a number'],
+    [{ budget: true }, 'budget must be a number'],
+    [{ budget: [] }, 'budget must be a number'],
+    [{ budget: -1 }, 'budget must be between 0 and 99999999.99'],
+    [{ budget: 100000000 }, 'budget must be between 0 and 99999999.99'],
+    [{ startLat: 90.1 }, 'startLat must be between -90 and 90'],
+    [{ destLng: -180.1 }, 'destLng must be between -180 and 180'],
+    [{ title: 'a\u0000b' }, 'title is required'],
     [{ isBookmarked: 'yes' }, 'isBookmarked must be true or false'],
   ])('rejects %p', async (change, message) => {
     const res = await request(app).post('/api/trips').send(validTrip(change));
@@ -87,6 +94,12 @@ describe('itinerary item validation', () => {
     [{ time: '10:60' }, 'time must be HH:MM'],
     [{ lat: 'up' }, 'lat must be a number'],
     [{ lng: 'left' }, 'lng must be a number'],
+    [{ lat: -91 }, 'lat must be between -90 and 90'],
+    [{ lng: 181 }, 'lng must be between -180 and 180'],
+    [{ type: {} }, 'type must be text'],
+    [{ type: '' }, 'type must be text'],
+    [{ notes: 5 }, 'notes must be text'],
+    [{ notes: 'a\u0000b' }, 'notes must be text'],
   ])('POST rejects %p', async (change, message) => {
     const res = await request(app).post('/api/trips/trip-1/items').send(validItem(change));
 
@@ -129,27 +142,50 @@ describe('when the database fails', () => {
   });
 });
 
-// bugs found while writing these tests
-// test.failing passes while the bug exists; once it's fixed, change it to a normal test
-describe('known bugs', () => {
-  test.failing('a date that does not exist (Feb 30) is rejected', async () => {
+describe('dates', () => {
+  test.each(['2026-02-30', '2027-02-29', '2026-04-31', '0000-01-01'])('rejects %s, which does not exist', async (date) => {
+    const res = await request(app)
+      .post('/api/trips')
+      .send(validTrip({ startDate: date, endDate: '2028-01-01' }));
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'startDate must be YYYY-MM-DD' });
+    expect(prisma.trip.create).not.toHaveBeenCalled();
+  });
+
+  test('accepts a real leap day', async () => {
     prisma.trip.create.mockResolvedValue(storedTrip);
 
     const res = await request(app)
       .post('/api/trips')
-      .send(validTrip({ startDate: '2026-02-30', endDate: '2026-03-05' }));
+      .send(validTrip({ startDate: '2028-02-29', endDate: '2028-03-01' }));
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(201);
+  });
+});
+
+describe('requests that cannot be handled', () => {
+  test.each([
+    ['broken JSON', '{"title": ', 400, 'Request body is not valid JSON'],
+    ['a body that is too large', JSON.stringify({ title: 'x'.repeat(200000) }), 413, 'Request body is too large'],
+  ])('%s gets a clear error', async (name, body, status, message) => {
+    const res = await request(app).post('/api/trips').set('Content-Type', 'application/json').send(body);
+
+    expect(res.status).toBe(status);
+    expect(res.body).toEqual({ error: message });
   });
 
-  test.failing('broken JSON gets a 400, not a 500', async () => {
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-
-    const res = await request(app)
-      .post('/api/trips')
-      .set('Content-Type', 'application/json')
-      .send('{"title": ');
+  test('a badly encoded address gets a 400', async () => {
+    const res = await request(app).get('/api/trips/%E0%A4%A');
 
     expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Bad request' });
+  });
+
+  test('an unknown address gets a JSON 404', async () => {
+    const res = await request(app).get('/api/nope');
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Not found' });
   });
 });

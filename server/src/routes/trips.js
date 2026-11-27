@@ -21,10 +21,39 @@ function serializeTrip(trip) {
   };
 }
 
-const isDateString = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(new Date(v));
+// JavaScript rolls "2026-02-30" over to March 2, so check the date survives the round trip
+const isDateString = (v) => {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || v.startsWith('0000')) return false;
+  const date = new Date(v);
+  return !isNaN(date) && toDateString(date) === v;
+};
 const isTimeString = (v) => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
-const isNonEmpty = (v) => typeof v === 'string' && v.trim() !== '';
-const numOrNull = (v) => (v === undefined || v === null || v === '' ? null : Number(v));
+// PostgreSQL can't store the null character in text
+const isText = (v) => typeof v === 'string' && !v.includes('\u0000');
+const isNonEmpty = (v) => isText(v) && v.trim() !== '';
+
+// smallest and largest value allowed for each number field (budget is DECIMAL(10, 2))
+const LATITUDE = [-90, 90];
+const LONGITUDE = [-180, 180];
+const NUMBER_RANGES = {
+  budget: [0, 99999999.99],
+  startLat: LATITUDE,
+  startLng: LONGITUDE,
+  destLat: LATITUDE,
+  destLng: LONGITUDE,
+  lat: LATITUDE,
+  lng: LONGITUDE,
+};
+
+// accepts a number or a numeric string; null or "" clears the field
+function readNumber(key, v) {
+  if (v === null || v === '') return { value: null };
+  const n = typeof v === 'number' || typeof v === 'string' ? Number(v) : NaN;
+  if (!Number.isFinite(n)) return { error: `${key} must be a number` };
+  const [min, max] = NUMBER_RANGES[key];
+  if (n < min || n > max) return { error: `${key} must be between ${min} and ${max}` };
+  return { value: n };
+}
 
 // pulls the trip fields we allow from the request body, checking them as we go
 // partial = true is used for PUT so only the fields that were sent get changed
@@ -44,9 +73,9 @@ function readTrip(body, partial) {
   }
   for (const key of ['startLat', 'startLng', 'destLat', 'destLng', 'budget']) {
     if (body[key] !== undefined) {
-      const n = numOrNull(body[key]);
-      if (n !== null && !Number.isFinite(n)) return { error: `${key} must be a number` };
-      data[key] = n;
+      const { value, error } = readNumber(key, body[key]);
+      if (error) return { error };
+      data[key] = value;
     }
   }
   if (body.isBookmarked !== undefined) {
@@ -75,13 +104,19 @@ function readItem(body, partial) {
     if (!isTimeString(body.time)) return { error: 'time must be HH:MM' };
     data.time = body.time;
   }
-  if (body.type !== undefined) data.type = String(body.type);
-  if (body.notes !== undefined) data.notes = body.notes || null;
+  if (body.type !== undefined) {
+    if (!isNonEmpty(body.type)) return { error: 'type must be text' };
+    data.type = body.type;
+  }
+  if (body.notes !== undefined) {
+    if (body.notes !== null && !isText(body.notes)) return { error: 'notes must be text' };
+    data.notes = body.notes || null;
+  }
   for (const key of ['lat', 'lng']) {
     if (body[key] !== undefined) {
-      const n = numOrNull(body[key]);
-      if (n !== null && !Number.isFinite(n)) return { error: `${key} must be a number` };
-      data[key] = n;
+      const { value, error } = readNumber(key, body[key]);
+      if (error) return { error };
+      data[key] = value;
     }
   }
   return { data };

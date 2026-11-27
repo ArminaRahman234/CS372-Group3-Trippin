@@ -72,6 +72,25 @@ button {
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 15px 40px rgba(79, 70, 229, 0.2);
+  flex-wrap: wrap;
+  gap: 25px;
+}
+
+/* long titles and place names wrap instead of pushing the page wider */
+.trip-header > div:first-child {
+  flex: 1 1 280px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.trip-header select {
+  max-width: 100%;
+}
+
+/* the trip buttons move below the title, then wrap, when there isn't room */
+.trip-header > div:last-child {
+  flex-wrap: wrap;
 }
 
 .trip-header .eyebrow {
@@ -178,6 +197,8 @@ button {
 
 .item-info {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .item-type {
@@ -328,6 +349,10 @@ textarea {
 
   .trip-header h1 {
     font-size: 30px;
+  }
+
+  .trip-header > div:first-child {
+    flex: none;
   }
 
   .section-heading {

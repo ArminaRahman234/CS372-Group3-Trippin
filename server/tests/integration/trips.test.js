@@ -57,6 +57,15 @@ describe('POST /api/trips', () => {
     expect(res.body.budget).toBeNull();
   });
 
+  test('saves the largest budget and the map limits', async () => {
+    const res = await request(app)
+      .post('/api/trips')
+      .send(validTrip({ budget: 99999999.99, startLat: -90, startLng: 180 }));
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ budget: 99999999.99, startLat: -90, startLng: 180 });
+  });
+
   test('saves nothing when the body is invalid', async () => {
     await request(app).post('/api/trips').send(validTrip({ title: '' }));
 
