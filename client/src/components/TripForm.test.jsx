@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import TripForm from './TripForm'
@@ -144,7 +144,9 @@ describe('TripForm', () => {
   })
 
   it('saves what was typed and closes the modal', async () => {
-    const { onSaveTrip, onClose, user } = renderTripForm()
+    const { onSaveTrip, onClose, user } = renderTripForm({
+      onSaveTrip: vi.fn().mockResolvedValue(true),
+    })
 
     await user.type(screen.getByLabelText(/Trip Title/), validTrip.title)
     await user.type(screen.getByLabelText(/Starting Location/), validTrip.startLocation)
@@ -154,7 +156,68 @@ describe('TripForm', () => {
     await save(user)
 
     expect(onSaveTrip).toHaveBeenCalledWith(expect.objectContaining(validTrip))
-    expect(onClose).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+
+  describe('while saving', () => {
+    // onSaveTrip stays pending until the test answers it
+    function renderPendingSave(options) {
+      let finish
+      const onSaveTrip = vi.fn(() => new Promise((resolve) => (finish = resolve)))
+      const view = renderTripForm({ trip: validTrip, onSaveTrip, ...options })
+      return { ...view, finish: (saved) => act(async () => finish(saved)) }
+    }
+
+    it('stays open until the save succeeds', async () => {
+      const { onClose, finish, user } = renderPendingSave()
+
+      await save(user)
+      expect(onClose).not.toHaveBeenCalled()
+
+      await finish(true)
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      [false, 'Save Trip'],
+      [true, 'Save Changes'],
+    ])('keeps the values after a failed save (editing: %s)', async (isEditing, button) => {
+      const { onClose, onSaveTrip, finish, user } = renderPendingSave({ isEditing })
+
+      await user.click(screen.getByRole('button', { name: button }))
+      await finish(false)
+
+      expect(onClose).not.toHaveBeenCalled()
+      expect(screen.getByLabelText(/Trip Title/)).toHaveValue('Chicago Weekend')
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+
+      await user.click(screen.getByRole('button', { name: button }))
+      expect(onSaveTrip).toHaveBeenCalledTimes(2)
+    })
+
+    it('saves only once when submitted twice before the screen updates', async () => {
+      const { onSaveTrip, container } = renderPendingSave()
+      const form = container.querySelector('form')
+
+      act(() => {
+        fireEvent.submit(form)
+        fireEvent.submit(form)
+      })
+
+      expect(onSaveTrip).toHaveBeenCalledTimes(1)
+    })
+
+    it('cannot be closed', async () => {
+      const { onClose, container, user } = renderPendingSave()
+
+      await save(user)
+
+      for (const name of ['Saving...', 'Cancel', '✕']) {
+        expect(screen.getByRole('button', { name })).toBeDisabled()
+      }
+      fireEvent.mouseDown(container.querySelector('.modal-overlay'))
+      expect(onClose).not.toHaveBeenCalled()
+    })
   })
 
   it('drops old map coordinates when a location is retyped', async () => {

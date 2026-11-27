@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ItineraryItem, ItineraryForm } from './ItineraryForm'
@@ -145,7 +145,7 @@ describe('ItineraryForm', () => {
   })
 
   it('saves a new item with formatted date, time and icon, then closes', async () => {
-    const { onSave, onClose, user } = renderForm()
+    const { onSave, onClose, user } = renderForm({ onSave: vi.fn().mockResolvedValue(true) })
 
     await fill(user, complete)
     await user.selectOptions(screen.getByRole('combobox'), 'Food')
@@ -162,7 +162,84 @@ describe('ItineraryForm', () => {
         rawTime: '14:30',
       }),
     )
-    expect(onClose).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+
+  describe('while saving', () => {
+    // onSave stays pending until the test answers it
+    function renderPendingSave(options) {
+      let finish
+      const onSave = vi.fn(() => new Promise((resolve) => (finish = resolve)))
+      const view = renderForm({ onSave, ...options })
+      return { ...view, finish: (saved) => act(async () => finish(saved)) }
+    }
+
+    it('stays open until the save succeeds', async () => {
+      const { onClose, finish, user } = renderPendingSave()
+
+      await fill(user, complete)
+      await submit(user)
+      expect(onClose).not.toHaveBeenCalled()
+
+      await finish(true)
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps what was typed after a failed save', async () => {
+      const { onClose, onSave, finish, user } = renderPendingSave()
+
+      await fill(user, complete)
+      await submit(user)
+      await finish(false)
+
+      expect(onClose).not.toHaveBeenCalled()
+      expect(screen.getByLabelText(/Activity or Booking Name/)).toHaveValue('Boat Tour')
+      expect(screen.getByLabelText(/Location/)).toHaveValue('Chicago Riverwalk')
+      expect(screen.getByLabelText(/Date/)).toHaveValue('2026-11-14')
+      expect(screen.getByLabelText(/Time/)).toHaveValue('14:30')
+
+      await submit(user)
+      expect(onSave).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps the changes after a failed edit', async () => {
+      const { onClose, finish, user } = renderPendingSave({
+        editingItem: uiItem,
+        activeTrip: chicagoTrip,
+      })
+
+      await user.type(screen.getByLabelText(/Notes/), ' at sunset')
+      await submit(user, 'Update Item')
+      await finish(false)
+
+      expect(onClose).not.toHaveBeenCalled()
+      expect(screen.getByLabelText(/Notes/)).toHaveValue('See the Bean at sunset')
+      expect(screen.getByRole('button', { name: 'Update Item' })).toBeEnabled()
+    })
+
+    it('saves only once when submitted twice before the screen updates', async () => {
+      const { onSave, container } = renderPendingSave({ editingItem: uiItem })
+      const form = container.querySelector('form')
+
+      act(() => {
+        fireEvent.submit(form)
+        fireEvent.submit(form)
+      })
+
+      expect(onSave).toHaveBeenCalledTimes(1)
+    })
+
+    it('cannot be closed', async () => {
+      const { onClose, container, user } = renderPendingSave({ editingItem: uiItem })
+
+      await submit(user, 'Update Item')
+
+      for (const name of ['Saving...', 'Cancel', '×']) {
+        expect(screen.getByRole('button', { name })).toBeDisabled()
+      }
+      fireEvent.mouseDown(container.querySelector('.modal-overlay'))
+      expect(onClose).not.toHaveBeenCalled()
+    })
   })
 
   it('fills in the current values when editing', () => {

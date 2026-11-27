@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import App from './App'
@@ -39,6 +39,22 @@ async function renderApp(data = { trips: [chicagoTrip], items: itinerary }) {
 
 const itemTitles = () => screen.queryAllByRole('heading', { level: 4 }).map((h) => h.textContent)
 const cardFor = (title) => screen.getByRole('heading', { name: title }).closest('article')
+
+const serverError = () => ({ ok: false, status: 500, json: async () => ({ error: 'Nope' }) })
+const requests = (fetchMock, method) =>
+  fetchMock.mock.calls.filter(([, options]) => options.method === method)
+
+// leaves the next request unanswered until the returned function is called
+function holdNextRequest(fetchMock) {
+  const answer = fetchMock.getMockImplementation()
+  let release
+  const gate = new Promise((resolve) => (release = resolve))
+  fetchMock.mockImplementationOnce(async (...args) => {
+    await gate
+    return answer(...args)
+  })
+  return release
+}
 
 describe('itinerary list', () => {
   it('groups items by day and sorts them by date and time', async () => {
@@ -107,6 +123,76 @@ describe('trip modal', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Windy City' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Edit Your Trip' })).not.toBeInTheDocument()
+  })
+
+  // dates far in the future, so the past-date warning never shows up
+  const fillNewTrip = async (user) => {
+    await user.click(screen.getByRole('button', { name: '+ Create Trip' }))
+    await user.type(screen.getByLabelText(/Trip Title/), 'Miami Break')
+    await user.type(screen.getByLabelText(/Starting Location/), 'Fort Wayne, IN')
+    await user.type(screen.getByLabelText(/Destination/), 'Miami, FL')
+    await user.type(screen.getByLabelText(/Start Date/), '2099-03-01')
+    await user.type(screen.getByLabelText(/End Date/), '2099-03-05')
+  }
+
+  it('keeps a new trip in the form when saving fails', async () => {
+    const { fetchMock, user } = await renderApp()
+    await fillNewTrip(user)
+    fetchMock.mockResolvedValueOnce(serverError())
+
+    await user.click(screen.getByRole('button', { name: 'Save Trip' }))
+    await vi.waitFor(() => expect(alertMock).toHaveBeenCalledWith('Unable to save this trip: Nope'))
+
+    expect(screen.getByRole('heading', { name: 'Create Your Trip' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/Trip Title/)).toHaveValue('Miami Break')
+    expect(screen.getByLabelText(/Starting Location/)).toHaveValue('Fort Wayne, IN')
+    expect(screen.getByLabelText(/Destination/)).toHaveValue('Miami, FL')
+    expect(screen.getByLabelText(/Start Date/)).toHaveValue('2099-03-01')
+    expect(screen.getByLabelText(/End Date/)).toHaveValue('2099-03-05')
+
+    // trying again with the same details works
+    await user.click(screen.getByRole('button', { name: 'Save Trip' }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Miami Break' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Create Your Trip' })).not.toBeInTheDocument()
+  })
+
+  it('keeps an edit open when saving fails, and updates the same trip on retry', async () => {
+    const { fetchMock, user } = await renderApp()
+
+    await user.click(screen.getByRole('button', { name: /Edit Trip/ }))
+    const title = screen.getByLabelText(/Trip Title/)
+    await user.clear(title)
+    await user.type(title, 'Windy City')
+    fetchMock.mockResolvedValueOnce(serverError())
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await vi.waitFor(() => expect(alertMock).toHaveBeenCalledWith('Unable to save this trip: Nope'))
+
+    expect(screen.getByRole('heading', { name: 'Edit Your Trip' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/Trip Title/)).toHaveValue('Windy City')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Chicago Weekend')
+
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Windy City' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Edit Your Trip' })).not.toBeInTheDocument()
+    expect(requests(fetchMock, 'POST')).toHaveLength(0)
+    expect(requests(fetchMock, 'PUT')).toHaveLength(2)
+  })
+
+  it('creates only one trip when submitted twice while saving', async () => {
+    const { fetchMock, user } = await renderApp()
+    await fillNewTrip(user)
+    const release = holdNextRequest(fetchMock)
+
+    await user.click(screen.getByRole('button', { name: 'Save Trip' }))
+    const saving = screen.getByRole('button', { name: 'Saving...' })
+    expect(saving).toBeDisabled()
+    fireEvent.submit(saving.closest('form'))
+    release()
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Miami Break' })).toBeInTheDocument()
+    expect(requests(fetchMock, 'POST')).toHaveLength(1)
   })
 
   it.each([
@@ -184,16 +270,79 @@ describe('itinerary modal', () => {
     await vi.waitFor(() => expect(itemTitles()).toHaveLength(remaining))
   })
 
-  // known bug: both forms close right away, so typed details are lost if saving fails
-  // it.fails passes while the bug exists; once it's fixed, change it to a normal it()
-  it.fails('keeps the form open when saving fails', async () => {
+  it('keeps the form open when saving fails', async () => {
     const { fetchMock, user } = await renderApp()
     await screen.findByRole('heading', { name: 'Brunch' })
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: 'Nope' }) })
+    fetchMock.mockResolvedValueOnce(serverError())
 
     await addBoatTour(user)
     await vi.waitFor(() => expect(alertMock).toHaveBeenCalledWith('Unable to save this item: Nope'))
 
     expect(screen.getByLabelText(/Activity or Booking Name/)).toHaveValue('Boat Tour')
+    expect(screen.getByLabelText(/Location/)).toHaveValue('Chicago Riverwalk')
+    expect(screen.getByLabelText(/Date/)).toHaveValue('2026-11-14')
+    expect(screen.getByLabelText(/Time/)).toHaveValue('10:30')
+    expect(itemTitles()).not.toContain('Boat Tour')
+
+    // trying again with the same details works
+    await user.click(screen.getByRole('button', { name: 'Add to Itinerary' }))
+
+    await screen.findByRole('heading', { name: 'Boat Tour' })
+    expect(screen.queryByRole('heading', { name: 'Add Itinerary Item' })).not.toBeInTheDocument()
+    expect(itemTitles()).toHaveLength(4)
+  })
+
+  it('keeps an edit open when saving fails, and updates the same item on retry', async () => {
+    const { fetchMock, user } = await renderApp()
+    await screen.findByRole('heading', { name: 'Brunch' })
+
+    await user.click(within(cardFor('Brunch')).getByRole('button', { name: 'Edit' }))
+    const name = screen.getByLabelText(/Activity or Booking Name/)
+    await user.clear(name)
+    await user.type(name, 'Late Brunch')
+    fetchMock.mockResolvedValueOnce(serverError())
+    await user.click(screen.getByRole('button', { name: 'Update Item' }))
+    await vi.waitFor(() => expect(alertMock).toHaveBeenCalledWith('Unable to save this item: Nope'))
+
+    expect(screen.getByRole('heading', { name: 'Edit Itinerary Item' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/Activity or Booking Name/)).toHaveValue('Late Brunch')
+
+    await user.click(screen.getByRole('button', { name: 'Update Item' }))
+
+    await screen.findByRole('heading', { level: 4, name: 'Late Brunch' })
+    expect(screen.queryByRole('heading', { name: 'Edit Itinerary Item' })).not.toBeInTheDocument()
+    expect(itemTitles()).toHaveLength(3)
+    expect(requests(fetchMock, 'POST')).toHaveLength(0)
+    expect(requests(fetchMock, 'PUT')).toHaveLength(2)
+  })
+
+  it('keeps the form open when there is no trip to add the item to', async () => {
+    const { user } = await renderApp({ trips: [] })
+
+    await user.click(screen.getByRole('button', { name: '+ Add Item' }))
+    await user.type(screen.getByLabelText(/Activity or Booking Name/), 'Boat Tour')
+    await user.type(screen.getByLabelText(/Location/), 'Chicago Riverwalk')
+    await user.type(screen.getByLabelText(/Date/), '2026-11-14')
+    await user.type(screen.getByLabelText(/Time/), '10:30')
+    await user.click(screen.getByRole('button', { name: 'Add to Itinerary' }))
+
+    expect(alertMock).toHaveBeenCalledWith('Please create a trip first.')
+    expect(screen.getByLabelText(/Activity or Booking Name/)).toHaveValue('Boat Tour')
+  })
+
+  it('creates only one item when submitted twice while saving', async () => {
+    const { fetchMock, user } = await renderApp()
+    await screen.findByRole('heading', { name: 'Brunch' })
+    const release = holdNextRequest(fetchMock)
+
+    await addBoatTour(user)
+    const saving = screen.getByRole('button', { name: 'Saving...' })
+    expect(saving).toBeDisabled()
+    fireEvent.submit(saving.closest('form'))
+    release()
+
+    await screen.findByRole('heading', { name: 'Boat Tour' })
+    expect(requests(fetchMock, 'POST')).toHaveLength(1)
+    expect(itemTitles()).toHaveLength(4)
   })
 })

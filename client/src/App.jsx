@@ -114,10 +114,11 @@ function App() {
   }, {});
 
 
+  // returns false when nothing was saved, so the form stays open
   async function handleSaveItem(itemData) {
     if (!activeTrip.id) {
       alert("Please create a trip first.");
-      return;
+      return false;
     }
 
     try {
@@ -131,9 +132,10 @@ function App() {
       setErrorMessage("");
     } catch (err) {
       alert(`Unable to save this item: ${err.message}`);
+      return false;
     }
 
-    setEditingItem(null);
+    return true;
   }
 
   async function handleDeleteItem(itemId) {
@@ -154,6 +156,7 @@ function App() {
   }
 
   // Save a newly created trip or update an existing trip.
+  // Returns false when the save fails, so the form stays open.
   async function handleSaveTrip(newTripData) {
     try {
       if (isEditingTrip && hasSavedTrip) {
@@ -166,12 +169,10 @@ function App() {
       }
     } catch (err) {
       alert(`Unable to save this trip: ${err.message}`);
-      return;
+      return false;
     }
 
-    setTripDraft({ ...emptyTrip });
-    setIsEditingTrip(false);
-    setIsTripModalOpen(false);
+    return true;
   }
 
   // Open a blank form to create a new trip.
